@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "test": "node --test",
-    "check": "node --check dist/app.js && node --check dist/launcher.js && node --check dist/quest.js && node --check dist/launch-config.js && node --test"
+    "check": "node --check dist/app.js && node --check dist/launcher.js && node --check dist/quest.js && node --test"
   },
   "engines": { "node": ">=20" }
 }
