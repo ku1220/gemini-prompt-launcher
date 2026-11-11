@@ -1,5 +1,5 @@
 import { SPELLS, getSpell, buildQuestPrompt } from './quest.js';
-import { detectPlatform, appLink, prefilledQuestLink } from './launcher.js';
+import { detectPlatform, appLink } from './launcher.js';
 
 const $ = (id) => document.getElementById(id);
 let selectedId = 'ultima';
@@ -19,21 +19,11 @@ function render() {
   $('spell-name').textContent = spell.name;
   $('spell-description').textContent = spell.description;
   $('prompt-preview').value = buildQuestPrompt(selectedId);
-  $('prepare-button').textContent = '入力されない場合の操作';
-  $('start-link').textContent = `${spell.name}で冒険をはじめる`;
+  $('prepare-button').textContent = `${spell.name}を手動で準備`;
   $('app-link').href = appLink(platform());
   $('app-link').rel = 'noreferrer';
-  const launch = prefilledQuestLink(buildQuestPrompt(selectedId));
-  $('start-link').hidden = !launch.url;
-  if (launch.url) {
-    $('start-link').href = launch.url;
-    $('start-link').rel = 'noreferrer';
-    $('start-mode').textContent = 'Geminiで内容を確認して、送信してください。';
-  } else {
-    $('start-link').removeAttribute('href');
-    $('start-mode').textContent = launch.error;
-  }
-  $('flow-note').textContent = 'Geminiでプロンプトを送信し、案内が出たら「＋」から写真を撮影・送信してください。入力欄が空の場合は、このページの「入力されない場合の操作」から全文コピーで続けられます。';
+  $('start-mode').textContent = '自動入力は利用できていません。初回は手動での送信が必要です。';
+  $('flow-note').textContent = '本文を選択して端末の機能でコピーし、Geminiへ貼り付けて送信してください。案内が出たら「＋」から写真を送信します。自動入力・自動実行は未実装です。';
   document.body.dataset.spell = selectedId;
 }
 

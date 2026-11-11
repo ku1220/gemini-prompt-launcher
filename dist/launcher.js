@@ -14,6 +14,8 @@ export function appLink(platform) {
   return GEMINI_WEB_URL;
 }
 
+// Diagnostic URL construction only. Receiver prefill failed in the tested Web
+// environment and the reported mobile environments; do not use as a start link.
 export function prefilledQuestLink(prompt) {
   if (typeof prompt !== 'string' || !prompt.trim()) return { url: null, bytes: 0, error: 'プロンプトが空です。' };
   try {
