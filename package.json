@@ -1,0 +1,13 @@
+{
+  "name": "gemini-prompt-launcher",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A privacy-conscious Japanese prompt handoff tool for Gemini.",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test",
+    "check": "node --check dist/app.js && node --check dist/launcher.js && node --test"
+  },
+  "engines": { "node": ">=20" }
+}

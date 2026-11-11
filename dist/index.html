@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="長文プロンプトを整えてGeminiへ。全文コピー、アプリへのリンク、実験的なURL自動入力をまとめたプライベートな作業スペース。">
+  <title>Prompt Bridge — Geminiへのプロンプトランチャー</title>
+  <link rel="icon" type="image/svg+xml" href="./icon.svg">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#prompt">プロンプト入力へ</a>
+  <aside class="sidebar">
+    <a class="brand" href="./" aria-label="Prompt Bridge ホーム"><img src="./icon.svg" width="34" height="34" alt=""><span>Prompt<span class="brand-light">Bridge</span></span></a>
+    <div class="workspace-label">YOUR WORKSPACE</div>
+    <div class="nav-item"><span class="nav-icon" aria-hidden="true">↗</span> プロンプトを作成 <span class="nav-dot"></span></div>
+    <div class="sidebar-bottom">
+      <span class="connection-dot"></span> ブラウザ内で処理
+      <p>APIキーも、アカウント登録も不要。<br>あなたの言葉を、そのまま次へ。</p>
+      <a href="https://github.com/ku1220/gemini-prompt-launcher" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+    </div>
+  </aside>
+  <div class="page-shell">
+    <header class="topbar"><span>ワークスペース <span class="breadcrumb">/</span> <strong>新しいプロンプト</strong></span><a href="#how-it-works">使い方 <span aria-hidden="true">↗</span></a></header>
+    <main>
+      <section class="intro" aria-labelledby="page-title">
+        <div class="eyebrow"><span class="tiny-spark" aria-hidden="true">✳</span> FROM YOUR MIND TO GEMINI</div>
+        <h1 id="page-title">ひらめきを、<br class="mobile-break">そのままGeminiへ。</h1>
+        <p>長い指示も、細かな条件も。ここで整えて、まとめて渡そう。</p>
+      </section>
+      <div class="workspace-grid">
+        <section class="editor-card" aria-labelledby="editor-title">
+          <div class="card-heading"><div><span class="step-marker">01</span><h2 id="editor-title">プロンプトを準備</h2></div><span class="small-label">最大200,000文字</span></div>
+          <div class="template-bar" aria-label="プロンプトの例"><span>例から始める</span><button type="button" data-template="research">リサーチ</button><button type="button" data-template="writing">文章作成</button><button type="button" data-template="code">コードレビュー</button></div>
+          <label class="sr-only" for="prompt">Geminiに渡すプロンプト</label>
+          <textarea id="prompt" spellcheck="false" placeholder="Geminiにお願いしたいことを書いてください。&#10;&#10;背景、目的、条件、出力形式までまとめると、&#10;ほしい答えに近づきます。" aria-describedby="input-hint input-error"></textarea>
+          <div class="editor-stats"><span id="input-hint"><span class="subtle-dot"></span> 改行・日本語・絵文字に対応</span><output id="char-count" for="prompt">0 <span>文字</span></output></div>
+          <p id="input-error" class="error-text" role="alert" hidden></p>
+          <div class="editor-tools"><div class="tool-group"><button type="button" class="text-button" id="import-button"><span aria-hidden="true">↥</span> ファイルを読み込む</button><button type="button" class="text-button" id="download-button" disabled><span aria-hidden="true">↓</span> 保存</button></div><button type="button" class="text-button muted" id="clear-button" disabled>クリア</button></div>
+          <input type="file" id="file-input" accept=".txt,.md,text/plain,text/markdown" hidden>
+          <div class="draft-row"><label class="checkbox-label"><input type="checkbox" id="save-draft"> この端末に下書きを保存</label><span>任意・ブラウザ内のみ</span></div>
+        </section>
+        <aside class="handoff-column" aria-label="Geminiへの受け渡し">
+          <section class="launch-card" aria-labelledby="launch-title">
+            <div class="card-heading"><div><span class="step-marker">02</span><h2 id="launch-title">Geminiに渡す</h2></div></div>
+            <label for="platform" class="field-label">開く環境</label>
+            <div class="select-wrap"><select id="platform"><option value="auto">自動判定</option><option value="android">Androidアプリ</option><option value="ios">iPhone / iPadアプリ</option><option value="web">Webブラウザ</option></select></div>
+            <p id="platform-hint" class="platform-hint"></p>
+            <button type="button" id="copy-button" class="primary-button" disabled><span aria-hidden="true">⧉</span> 全文をコピー <span aria-hidden="true">→</span></button>
+            <div class="open-step"><span class="open-step-number">2</span><a id="app-link" class="open-link" aria-disabled="true">Geminiを開く <span aria-hidden="true">↗</span></a></div>
+            <p class="launch-caption">コピーしたらGeminiを開き、入力欄に貼り付けてください。</p>
+            <div class="compatibility-note"><span aria-hidden="true">ⓘ</span><p>アプリの起動は端末設定に依存します。自動で入力されない場合も、全文コピーで続けられます。</p></div>
+          </section>
+          <section class="experiment-card" aria-labelledby="experiment-title">
+            <div class="experiment-title"><h2 id="experiment-title">URLで自動入力を試す</h2><span class="badge">実験機能</span></div>
+            <p>プロンプトを <code>?q=</code> に入れたURLを開きます。Gemini側の対応は未確認です。</p>
+            <a id="prefill-link" class="experiment-link" aria-disabled="true">Pre-filled URLを開く <span aria-hidden="true">↗</span></a>
+            <p id="url-hint" class="url-hint">プロンプトを入力すると利用できます。</p>
+            <p class="privacy-note">URLに本文が含まれ、Googleへ渡ります。機密情報には使わないでください。</p>
+          </section>
+          <button type="button" id="share-button" class="share-button" disabled><span aria-hidden="true">↗</span> このプロンプトの共有リンクをコピー</button>
+          <p class="share-caption">本文を含むリンクです。長文はファイルで共有できます。</p>
+        </aside>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <div id="share-output-wrap" class="share-output-wrap" hidden><label for="share-output">共有リンク（本文を含みます）</label><textarea id="share-output" readonly></textarea></div>
+      <section id="how-it-works" class="how-it-works" aria-labelledby="how-title">
+        <div class="section-heading"><h2 id="how-title">思考を止めずに、次の一歩へ。</h2><span>HOW IT WORKS</span></div>
+        <div class="how-grid"><article><span>01 / PREPARE</span><h3>まとめて書く</h3><p>長文を入力するか、.txt / .mdから読み込み。改行もそのまま保持します。</p></article><article><span>02 / COPY & OPEN</span><h3>コピーして、開く</h3><p>全文をコピーし、GoogleのリンクからGeminiへ。アプリが開かなければWeb版で続行できます。</p></article><article><span>03 / REVIEW & SEND</span><h3>確認して、送信</h3><p>入力欄に貼り付け、内容を確認してから送信。URLによる自動入力は実験機能です。</p></article></div>
+      </section>
+      <details class="technical-details"><summary>リンク連携の対応状況について</summary><p>このサイトはGoogleが公開するHTTPSリンクを使います。アプリの起動にはOSとGoogle側のApp Links / Universal Linksの設定が必要です。独自サイトだけでGeminiへの関連付けや自動入力は追加できません。</p><p>任意のテキストを渡す <code>?q=</code> の公式仕様は確認できていません。iOSの通常の <code>/app?q=…</code> は、調査したUniversal Linksの対象に含まれていません。URLは保守的に8,000バイトまでに制限しています。これはGoogle公表の上限ではありません。</p><p><a href="https://gemini.google.com/app" rel="noreferrer">Gemini Web版を開く ↗</a> · <a href="https://github.com/ku1220/gemini-prompt-launcher/blob/main/docs/LINK-COMPATIBILITY.md" target="_blank" rel="noopener noreferrer">仕様・参考資料 ↗</a></p></details>
+      <footer><span>Prompt Bridge <span class="footer-divider">/</span> Built for your next idea.</span><span>非公式ツール · Googleとは提携していません</span></footer>
+    </main>
+  </div>
+</body>
+</html>
