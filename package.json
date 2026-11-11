@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "A privacy-conscious Japanese prompt handoff tool for Gemini.",
+  "description": "CRYSTAL QUEST: FF-inspired magic photo prompts and Gemini app handoff.",
   "scripts": {
     "start": "node scripts/serve.mjs",
     "test": "node --test",
-    "check": "node --check dist/app.js && node --check dist/launcher.js && node --test"
+    "check": "node --check dist/app.js && node --check dist/launcher.js && node --check dist/quest.js && node --check dist/launch-config.js && node --test"
   },
   "engines": { "node": ">=20" }
 }

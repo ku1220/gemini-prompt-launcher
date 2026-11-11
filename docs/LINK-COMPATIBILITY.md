@@ -1,56 +1,66 @@
-# Geminiへのリンクと対応範囲
+# CRYSTAL QUEST：Gemini起動リンクの対応範囲
 
 確認日：2026年11月12日
 
-## 実装の境界
+## 公式イベントの実装で確認できたこと
 
-App Links / Universal Linksは、Webサイトとアプリの双方が関連付けに対応する仕組みです。第三者が独自サイトに関連付けファイルを置くだけでは、GoogleのGeminiアプリへ新しいリンク経路を追加できません。
+[Google公式の記事](https://note.com/google_gemini/n/n96348d37694c)は、呪文を選ぶとイベント用のプロンプトがGeminiへ渡り、自動で実行される体験を説明しています。終了した[公式体験ページのアーカイブ](https://web.archive.org/web/20260802112709id_/https://www.dragonquest.jp/geminiquest/event/)では、次のパラメーターを持つGoogleの起動リンクを確認しました。
 
-このサイトはユーザー操作でGoogle所有のHTTPSリンクへ移動します。独自の `gemini://` スキームや、独自ドメイン用の偽の `assetlinks.json` / AASAファイルは使用しません。
+```text
+https://gemini.google.com/app/download/mobile
+  ?mode=fast
+  &target=image
+  &prompt_id=FhNSphiBckxl
+  &prompt_action=autosubmit
+  &redirect=home
+```
 
-## 対応表
+これは調査対象のマダンテ用リンクの記録であり、FF版に設定する値ではありません。リンクの `prompt_id` はGoogle側に登録されたDQ用プロンプトを指定します。Webサイト上の本文をFF用に書き換えても、そのIDの登録内容は変わりません。
 
-| 導線 | 使用するURL | 確認できた範囲 |
+任意のプロンプトを登録してIDを発行する一般公開API・手順は、確認した公開資料からは見つかっていません。`?q=` で任意の長文を渡し、自動実行できるとは扱いません。
+
+## FF版の現在の動作
+
+| 導線 | 現在の状態 |
+| --- | --- |
+| 魔法選択とFF用プロンプト生成 | 6種類に対応。初期選択はアルテマです。 |
+| Geminiへの初回入力 | 全文コピー → Geminiを開く → 利用者が貼り付けて送信するモードです。 |
+| 初回案内 | 写真を受け取るまでは指定された案内文だけを返すようプロンプトで指示します。 |
+| 写真受信後 | 選択魔法を使う完成画像1枚だけを生成するよう指示します。写真はGeminiに直接送ります。 |
+| FFプロンプトの自動入力・実行 | 未接続です。実際に登録・検証されたFF用IDが必要です。 |
+
+`dist/launch-config.js` の `REGISTERED_PROMPTS` は、魔法ごとの登録済みFFプロンプトの、端末別に検証した完全URLを設定するためのものです。初期値はすべて `null` とし、DQ用IDや架空のIDは設定しません。iOS・Android・Webを個別に検証し、元のURLを変更せず使用します。ローカルの設定だけでGoogle側へ登録できるわけではありません。
+
+現地用 `/event/` ページのアーカイブから抽出したボタンの実URLは [EVENT-LINK-EVIDENCE.json](EVENT-LINK-EVIDENCE.json) に記録しています。オンライン用画像テンプレートのリンクとは区別しています。
+
+プロンプトに書いた案内文、画像枚数、外見の保持は生成モデルへの指示です。WebサイトがGeminiの返答を検査・強制する仕組みではないため、完全一致や生成成功は保証できません。
+
+## App Links / Universal Links
+
+| 環境 | 通常の起動リンク | 確認できた範囲 |
 | --- | --- | --- |
-| iOSで開く | `https://gemini.google.com/app/download/ios` | GoogleのAASAに対象パスが存在します。実際の起動は端末・ブラウザ・設定次第です。プロンプトはコピーして貼り付けます。 |
-| Androidで開く | `https://gemini.google.com/app/download/mobile` | Googleの関連付けにGeminiパッケージが存在します。アプリ側Manifestの対象パスは未確認で、起動は保証しません。 |
-| Webで開く | `https://gemini.google.com/app` | Gemini Webへの通常リンクです。 |
-| URLによる入力・実験 | `https://gemini.google.com/app?q=...` | 任意テキストの公式対応は未確認です。入力、アプリ起動、長文の受け渡しを保証しません。 |
-| このサイトへの事前入力 | `?prompt=...` または `#prompt=...` | このサイト自身が解析する仕様です。Gemini側の仕様ではありません。 |
+| iOS | `https://gemini.google.com/app/download/ios` | GoogleのAASAに対象パスがあります。実際の起動はアプリの導入状態、ブラウザ、端末設定に依存します。 |
+| Android | `https://gemini.google.com/app/download/mobile` | Googleのドメイン関連付けにGeminiパッケージがあります。アプリ側Manifestの対象パスは未確認です。 |
+| Web | `https://gemini.google.com/app` | Gemini Webへの通常リンクです。 |
 
-Googleの公式プロンプト集には `prompt_action=prefill&prompt_id=...` のリンクがあります。これはGoogleに登録されたプロンプトIDを指定する形式で、任意の長文を直接渡せる証拠ではありません。
+このサイトは、利用者の操作からGoogle所有のHTTPSリンクを直接開きます。独自サイト側だけでGeminiアプリとの関連付けを新設することはできません。独自の `gemini://` スキームや偽のAASA・`assetlinks.json` は使用しません。
 
-一般的な `/app?q=...` は、確認時点のiOS AASAでUniversal Linkとして一致するパス・クエリ条件ではありません。そのため実験リンクを「iOSアプリへの自動入力」として案内しません。
+## 実機での確認が必要な項目
 
-## 長文の扱い
-
-URL形式では本文をパーセントエンコードするため、日本語や記号が多い文章ほどURLが大きくなります。ブラウザ・OS・リンク処理側の上限は一律ではありません。
-
-- 生成URLがUTF-8で8,000バイトを超える場合、URL入力の実験を無効にします。これはサイト独自のガードです。
-- 長文は全文コピーを利用します。URL用に本文を切り詰めて送ることはしません。
-- コピーがブラウザに拒否された場合は、編集欄から手動コピーします。
-- アプリへの遷移成功や入力成功は、Webサイトから確実には検知できません。
-- Geminiへの自動送信は行いません。最後の確認と送信は利用者が行います。
-
-## 実機確認チェックリスト
-
-以下は実機確認が必要な項目です。リポジトリ内の自動テストの成功は、これらの確認完了を意味しません。
-
-- [ ] Android + Chrome + Geminiインストール済み：通常リンクでの遷移と全文貼り付け。
-- [ ] Android + Gemini未インストール：ブラウザまたは案内先への遷移。
-- [ ] iPhone + Safari + Geminiインストール済み：Universal Linkの起動と全文貼り付け。
-- [ ] iPhone + Gemini未インストール：案内先への遷移。
-- [ ] iOS / Androidのアプリ内ブラウザ：コピー拒否時の案内と手動操作。
-- [ ] 日本語、絵文字、改行、`&`・`#`・`?` を含む文章の内容一致。
-- [ ] 8,000バイト境界と長文での実験リンクの無効化、全文コピーの維持。
-- [ ] 各端末のGeminiで実験用 `q` の受け取り可否。非対応時にも通常導線を利用できること。
+- [ ] Android + Chrome：インストール済み・未インストールでの通常リンクの遷移。
+- [ ] iPhone + Safari：Universal Linkの起動、未インストール時の遷移。
+- [ ] 初回にFF用プロンプトを全文送信し、写真受信前に指定の案内だけが返ること。
+- [ ] 人物とモンスター立像の写真を送信し、選択した魔法の画像が1枚生成されること。
+- [ ] コピー拒否時の手動操作と、日本語・改行・絵文字を含む本文の一致。
+- [ ] FF用IDを登録できた場合：魔法ごとに、起動・初回送信・案内・撮影後の生成まで確認すること。
 
 ## 一次資料
 
+- [Google公式：ジェミニクエスト体験記事](https://note.com/google_gemini/n/n96348d37694c)
+- [公式体験ページのアーカイブ](https://web.archive.org/web/20260802112709id_/https://www.dragonquest.jp/geminiquest/event/)
 - [Android App Linksの概要](https://developer.android.com/training/app-links/about)
 - [Apple：アプリとWebサイトのコンテンツをリンクする](https://developer.apple.com/documentation/xcode/allowing-apps-and-websites-to-link-to-your-content)
 - [GoogleのAndroid関連付け](https://gemini.google.com/.well-known/assetlinks.json)
 - [GoogleのiOS関連付け（AASA）](https://gemini.google.com/.well-known/apple-app-site-association)
-- [Google公式Geminiプロンプト集](https://gemini.google/explore/)
 
-Google側の関連付けやアプリの挙動は変更される可能性があります。挙動が変わった場合は、通常導線のコピーとWeb版を使用してください。
+アーカイブは当時の仕組みを示す資料です。既存DQリンクが現在も使えることや、FF版への流用を保証するものではありません。

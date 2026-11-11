@@ -3,77 +3,62 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="dark">
   <meta name="referrer" content="no-referrer">
-  <meta name="description" content="長文プロンプトを整えてGeminiへ。全文コピー、アプリへのリンク、実験的なURL自動入力をまとめたプライベートな作業スペース。">
-  <title>Prompt Bridge — Geminiへのプロンプトランチャー</title>
+  <meta name="theme-color" content="#080e1c">
+  <meta name="description" content="魔法を選び、あなたの写真をファンタジーの戦闘シーンへ。FINAL FANTASYに着想を得た、Geminiで楽しむ写真クエスト。">
+  <title>CRYSTAL QUEST — その一枚が、伝説になる。</title>
   <link rel="icon" type="image/svg+xml" href="./icon.svg">
   <link rel="stylesheet" href="./styles.css">
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <a class="skip-link" href="#prompt">プロンプト入力へ</a>
-  <aside class="sidebar">
-    <a class="brand" href="./" aria-label="Prompt Bridge ホーム"><img src="./icon.svg" width="34" height="34" alt=""><span>Prompt<span class="brand-light">Bridge</span></span></a>
-    <div class="workspace-label">YOUR WORKSPACE</div>
-    <div class="nav-item"><span class="nav-icon" aria-hidden="true">↗</span> プロンプトを作成 <span class="nav-dot"></span></div>
-    <div class="sidebar-bottom">
-      <span class="connection-dot"></span> ブラウザ内で処理
-      <p>APIキーも、アカウント登録も不要。<br>あなたの言葉を、そのまま次へ。</p>
-      <a href="https://github.com/ku1220/gemini-prompt-launcher" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
-    </div>
-  </aside>
-  <div class="page-shell">
-    <header class="topbar"><span>ワークスペース <span class="breadcrumb">/</span> <strong>新しいプロンプト</strong></span><a href="#how-it-works">使い方 <span aria-hidden="true">↗</span></a></header>
-    <main>
-      <section class="intro" aria-labelledby="page-title">
-        <div class="eyebrow"><span class="tiny-spark" aria-hidden="true">✳</span> FROM YOUR MIND TO GEMINI</div>
-        <h1 id="page-title">ひらめきを、<br class="mobile-break">そのままGeminiへ。</h1>
-        <p>長い指示も、細かな条件も。ここで整えて、まとめて渡そう。</p>
-      </section>
-      <div class="workspace-grid">
-        <section class="editor-card" aria-labelledby="editor-title">
-          <div class="card-heading"><div><span class="step-marker">01</span><h2 id="editor-title">プロンプトを準備</h2></div><span class="small-label">最大200,000文字</span></div>
-          <div class="template-bar" aria-label="プロンプトの例"><span>例から始める</span><button type="button" data-template="research">リサーチ</button><button type="button" data-template="writing">文章作成</button><button type="button" data-template="code">コードレビュー</button></div>
-          <label class="sr-only" for="prompt">Geminiに渡すプロンプト</label>
-          <textarea id="prompt" spellcheck="false" placeholder="Geminiにお願いしたいことを書いてください。&#10;&#10;背景、目的、条件、出力形式までまとめると、&#10;ほしい答えに近づきます。" aria-describedby="input-hint input-error"></textarea>
-          <div class="editor-stats"><span id="input-hint"><span class="subtle-dot"></span> 改行・日本語・絵文字に対応</span><output id="char-count" for="prompt">0 <span>文字</span></output></div>
-          <p id="input-error" class="error-text" role="alert" hidden></p>
-          <div class="editor-tools"><div class="tool-group"><button type="button" class="text-button" id="import-button"><span aria-hidden="true">↥</span> ファイルを読み込む</button><button type="button" class="text-button" id="download-button" disabled><span aria-hidden="true">↓</span> 保存</button></div><button type="button" class="text-button muted" id="clear-button" disabled>クリア</button></div>
-          <input type="file" id="file-input" accept=".txt,.md,text/plain,text/markdown" hidden>
-          <div class="draft-row"><label class="checkbox-label"><input type="checkbox" id="save-draft"> この端末に下書きを保存</label><span>任意・ブラウザ内のみ</span></div>
-        </section>
-        <aside class="handoff-column" aria-label="Geminiへの受け渡し">
-          <section class="launch-card" aria-labelledby="launch-title">
-            <div class="card-heading"><div><span class="step-marker">02</span><h2 id="launch-title">Geminiに渡す</h2></div></div>
-            <label for="platform" class="field-label">開く環境</label>
-            <div class="select-wrap"><select id="platform"><option value="auto">自動判定</option><option value="android">Androidアプリ</option><option value="ios">iPhone / iPadアプリ</option><option value="web">Webブラウザ</option></select></div>
-            <p id="platform-hint" class="platform-hint"></p>
-            <button type="button" id="copy-button" class="primary-button" disabled><span aria-hidden="true">⧉</span> 全文をコピー <span aria-hidden="true">→</span></button>
-            <div class="open-step"><span class="open-step-number">2</span><a id="app-link" class="open-link" aria-disabled="true">Geminiを開く <span aria-hidden="true">↗</span></a></div>
-            <p class="launch-caption">コピーしたらGeminiを開き、入力欄に貼り付けてください。</p>
-            <div class="compatibility-note"><span aria-hidden="true">ⓘ</span><p>アプリの起動は端末設定に依存します。自動で入力されない場合も、全文コピーで続けられます。</p></div>
-          </section>
-          <section class="experiment-card" aria-labelledby="experiment-title">
-            <div class="experiment-title"><h2 id="experiment-title">URLで自動入力を試す</h2><span class="badge">実験機能</span></div>
-            <p>プロンプトを <code>?q=</code> に入れたURLを開きます。Gemini側の対応は未確認です。</p>
-            <a id="prefill-link" class="experiment-link" aria-disabled="true">Pre-filled URLを開く <span aria-hidden="true">↗</span></a>
-            <p id="url-hint" class="url-hint">プロンプトを入力すると利用できます。</p>
-            <p class="privacy-note">URLに本文が含まれ、Googleへ渡ります。機密情報には使わないでください。</p>
-          </section>
-          <button type="button" id="share-button" class="share-button" disabled><span aria-hidden="true">↗</span> このプロンプトの共有リンクをコピー</button>
-          <p class="share-caption">本文を含むリンクです。長文はファイルで共有できます。</p>
-        </aside>
-      </div>
+  <a class="skip-link" href="#magic">魔法を選ぶ</a>
+  <div class="ambient-stars" aria-hidden="true"></div>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="クリスタルクエスト ホーム"><img src="./icon.svg" width="34" height="42" alt=""><span>CRYSTAL QUEST<small>クリスタルクエスト</small></span></a>
+    <nav aria-label="メインメニュー"><a href="#magic">魔法を選ぶ</a><a href="#how-to-play">遊び方</a></nav>
+    <span class="header-note"><span aria-hidden="true">✧</span> A PHOTO ADVENTURE WITH GEMINI</span>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="page-title">
+      <div class="hero-copy"><p class="eyebrow"><span></span> FINAL FANTASY INSPIRED</p><h1 id="page-title">その一枚が、<br><span>伝説になる。</span></h1><p class="hero-description">日常のあなたに、クリスタルの輝きを。<br>魔法を選び、カメラの先にある世界へ旅立とう。</p><a class="hero-scroll" href="#magic"><span class="scroll-line" aria-hidden="true"></span> あなたの魔法を選ぶ <span aria-hidden="true">↓</span></a><p class="hero-caption">写真からはじまる、あなただけのファンタジー。</p></div>
+      <div class="crystal-scene" aria-hidden="true"><div class="scene-orbit orbit-one"></div><div class="scene-orbit orbit-two"></div><span class="scene-star star-one">✧</span><span class="scene-star star-two">✦</span><span class="scene-star star-three">✧</span><img class="hero-crystal" src="./crystal.svg" width="480" height="490" alt=""><div class="scene-ground"></div><div class="crystal-label"><span>THE CRYSTAL CALLS</span><small>光は、あなたの中にある。</small></div></div>
+      <span class="hero-side-note" aria-hidden="true">YOUR STORY / YOUR MAGIC / YOUR MOMENT</span>
+    </section>
+    <section class="magic-section" id="magic" aria-labelledby="magic-title">
+      <div class="section-heading"><div><p class="eyebrow">01 <span class="eyebrow-rule"></span> CHOOSE YOUR MAGIC</p><h2 id="magic-title">どの魔法で、世界を変える？</h2></div><p class="section-caption">6つの魔法から、ひとつを選択。</p></div>
+      <fieldset class="spell-grid"><legend class="sr-only">使用する魔法</legend>
+        <label class="spell-option" style="--spell-color:#b6b9ff"><input type="radio" name="spell" value="ultima" checked><span class="spell-card"><span class="spell-check" aria-hidden="true">✓</span><svg class="spell-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4 38 24 24 44 10 24Z M4 24h40 M24 4v40 M13 10l22 28 M35 10 13 38"/></svg><span class="spell-english">ULTIMA</span><strong>アルテマ</strong><span class="spell-element">究極の無属性魔法</span></span></label>
+        <label class="spell-option" style="--spell-color:#f3ab79"><input type="radio" name="spell" value="flare"><span class="spell-card"><span class="spell-check" aria-hidden="true">✓</span><svg class="spell-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="m24 4 4 12 10-5-5 10 11 3-11 4 5 10-10-5-4 11-4-11-10 5 5-10-11-4 11-3-5-10 10 5Z"/><circle cx="24" cy="24" r="6"/></svg><span class="spell-english">FLARE</span><strong>フレア</strong><span class="spell-element">灼熱の爆発魔法</span></span></label>
+        <label class="spell-option" style="--spell-color:#e9dbaf"><input type="radio" name="spell" value="holy"><span class="spell-card"><span class="spell-check" aria-hidden="true">✓</span><svg class="spell-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 3v42 M3 24h42 M9 9l30 30 M39 9 9 39 M24 12l8 12-8 12-8-12Z"/></svg><span class="spell-english">HOLY</span><strong>ホーリー</strong><span class="spell-element">神聖な光の魔法</span></span></label>
+        <label class="spell-option" style="--spell-color:#cab5f3"><input type="radio" name="spell" value="thundaga"><span class="spell-card"><span class="spell-check" aria-hidden="true">✓</span><svg class="spell-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 3 11 27h12l-3 18 17-27H25Z M6 16l5-6 M37 38l5-7"/></svg><span class="spell-english">THUNDAGA</span><strong>サンダガ</strong><span class="spell-element">天を裂く雷の魔法</span></span></label>
+        <label class="spell-option" style="--spell-color:#91d8ec"><input type="radio" name="spell" value="blizzaga"><span class="spell-card"><span class="spell-check" aria-hidden="true">✓</span><svg class="spell-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 3v42 M6 13l36 22 M6 35l36-22 M17 7l7 7 7-7 M17 41l7-7 7 7 M7 20l10-2-2-10 M41 28l-10 2 2 10 M7 28l10 2-2 10 M41 20l-10-2 2-10"/></svg><span class="spell-english">BLIZZAGA</span><strong>ブリザガ</strong><span class="spell-element">凍てつく氷の魔法</span></span></label>
+        <label class="spell-option" style="--spell-color:#d9ac8d"><input type="radio" name="spell" value="meteor"><span class="spell-card"><span class="spell-check" aria-hidden="true">✓</span><svg class="spell-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="m16 20 8-12 M24 24 38 3 M29 30l16-15 M8 28l-4 8 7 8 10-2 5-9-6-8-8-1Z M28 12l5-8 M35 29l9-9"/><path d="m10 32 7-2 4 5-5 5-6-3Z"/></svg><span class="spell-english">METEOR</span><strong>メテオ</strong><span class="spell-element">星を降らせる魔法</span></span></label>
+      </fieldset>
+      <div class="departure-panel"><div class="selected-spell"><span class="selected-label">YOUR MAGIC</span><div class="selected-title"><span class="mini-diamond" aria-hidden="true"></span><h3 id="spell-name">アルテマ</h3></div><p id="spell-description">すべてを包む光と、圧倒的なエネルギー。究極の魔法を、その手から。</p></div><div class="departure-action"><a id="start-link" class="primary-button" hidden>Geminiで冒険をはじめる <span aria-hidden="true">↗</span></a><button id="prepare-button" class="primary-button" type="button">アルテマのプロンプトを準備 <span aria-hidden="true">→</span></button><p id="start-mode">現在は初回の貼り付け・送信が必要です</p></div></div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
-      <div id="share-output-wrap" class="share-output-wrap" hidden><label for="share-output">共有リンク（本文を含みます）</label><textarea id="share-output" readonly></textarea></div>
-      <section id="how-it-works" class="how-it-works" aria-labelledby="how-title">
-        <div class="section-heading"><h2 id="how-title">思考を止めずに、次の一歩へ。</h2><span>HOW IT WORKS</span></div>
-        <div class="how-grid"><article><span>01 / PREPARE</span><h3>まとめて書く</h3><p>長文を入力するか、.txt / .mdから読み込み。改行もそのまま保持します。</p></article><article><span>02 / COPY & OPEN</span><h3>コピーして、開く</h3><p>全文をコピーし、GoogleのリンクからGeminiへ。アプリが開かなければWeb版で続行できます。</p></article><article><span>03 / REVIEW & SEND</span><h3>確認して、送信</h3><p>入力欄に貼り付け、内容を確認してから送信。URLによる自動入力は実験機能です。</p></article></div>
-      </section>
-      <details class="technical-details"><summary>リンク連携の対応状況について</summary><p>このサイトはGoogleが公開するHTTPSリンクを使います。アプリの起動にはOSとGoogle側のApp Links / Universal Linksの設定が必要です。独自サイトだけでGeminiへの関連付けや自動入力は追加できません。</p><p>任意のテキストを渡す <code>?q=</code> の公式仕様は確認できていません。iOSの通常の <code>/app?q=…</code> は、調査したUniversal Linksの対象に含まれていません。URLは保守的に8,000バイトまでに制限しています。これはGoogle公表の上限ではありません。</p><p><a href="https://gemini.google.com/app" rel="noreferrer">Gemini Web版を開く ↗</a> · <a href="https://github.com/ku1220/gemini-prompt-launcher/blob/main/docs/LINK-COMPATIBILITY.md" target="_blank" rel="noopener noreferrer">仕様・参考資料 ↗</a></p></details>
-      <footer><span>Prompt Bridge <span class="footer-divider">/</span> Built for your next idea.</span><span>非公式ツール · Googleとは提携していません</span></footer>
-    </main>
-  </div>
+    </section>
+    <section class="how-section" id="how-to-play" aria-labelledby="how-title">
+      <div class="section-heading"><div><p class="eyebrow">02 <span class="eyebrow-rule"></span> HOW TO PLAY</p><h2 id="how-title">冒険に必要なのは、あなたの一枚。</h2></div><span class="section-ornament" aria-hidden="true">✧</span></div>
+      <div class="how-grid"><article><div class="step-top"><span class="step-number">01</span><span class="step-line"></span></div><h3>魔法を決めて、Geminiへ</h3><p>選んだ魔法のプロンプトをGeminiに送信。勇者を迎える案内から、冒険が始まります。</p></article><article><div class="step-top"><span class="step-number">02</span><span class="step-line"></span></div><h3>カメラで、勇姿を撮影</h3><p>Geminiの「＋」からカメラを起動。あなたとモンスターが写った写真を送ってください。</p></article><article><div class="step-top"><span class="step-number">03</span><span class="step-line"></span></div><h3>一枚の戦闘シーンへ</h3><p>写真の中のあなたを、魔法を放つ勇者に。選んだ魔法に合わせた画像の生成を依頼します。</p></article></div>
+      <p id="flow-note" class="flow-note">現在はプロンプトをコピーし、Geminiに貼り付けて送信する方式です。写真の撮影・送信・画像生成はGeminiで行います。</p>
+    </section>
+    <section class="behind-section" aria-label="プロンプトと対応状況">
+      <details id="prompt-details" class="prompt-details"><summary><span>使用するプロンプト</span><span class="summary-icon" aria-hidden="true">＋</span></summary><div class="prompt-content"><p>選んだ魔法と、撮影を待ってから画像を1枚生成する手順を含みます。</p><label class="sr-only" for="prompt-preview">Geminiに送信するプロンプト</label><textarea id="prompt-preview" readonly spellcheck="false"></textarea><div class="prompt-tools"><button id="copy-prompt" type="button" class="secondary-button">プロンプトをコピー</button><button id="download-prompt" type="button" class="text-button">テキストで保存 <span aria-hidden="true">↓</span></button></div></div></details>
+      <details class="connection-details"><summary>アプリ起動・自動実行の対応状況</summary><p>Geminiアプリの起動は端末とGoogle側の対応に依存します。FF版の自動入力・実行は未接続です。現在は初回のみコピー・貼り付け・送信が必要です。</p><a href="https://github.com/ku1220/gemini-prompt-launcher/blob/main/docs/LINK-COMPATIBILITY.md" target="_blank" rel="noopener noreferrer">詳しい対応状況を見る ↗</a></details>
+    </section>
+  </main>
+  <footer class="site-footer"><a class="footer-brand" href="./">CRYSTAL QUEST<span>Every picture holds a new story.</span></a><div><p>FINAL FANTASYに着想を得た非公式ファンツールです。</p><p>Google・スクウェア・エニックスとは提携していません。 <a href="https://github.com/ku1220/gemini-prompt-launcher" target="_blank" rel="noopener noreferrer">GitHub ↗</a></p></div></footer>
+  <dialog id="handoff-dialog" aria-labelledby="handoff-title">
+    <div class="dialog-heading"><p class="eyebrow">BEFORE YOUR ADVENTURE</p><button id="close-dialog" class="close-button" type="button" aria-label="閉じる">×</button></div>
+    <h2 id="handoff-title">冒険の準備</h2><p id="handoff-message" class="handoff-message" aria-live="polite">選んだ魔法のプロンプトをコピーし、Geminiへ渡しましょう。</p>
+    <ol class="handoff-steps"><li><span>01</span> プロンプトをコピー</li><li><span>02</span> Geminiに貼り付けて送信</li><li><span>03</span> 案内に沿って撮影・送信</li></ol>
+    <label class="field-label" for="platform">開く環境</label><select id="platform"><option value="auto">自動判定</option><option value="android">Androidアプリ</option><option value="ios">iPhone / iPadアプリ</option><option value="web">Webブラウザ</option></select>
+    <div class="dialog-actions"><button id="dialog-copy-button" class="secondary-button" type="button">プロンプトをコピー</button><a id="app-link" class="primary-button">Geminiを開く <span aria-hidden="true">↗</span></a></div>
+    <button id="select-prompt-button" class="text-button" type="button" hidden>本文を選択</button>
+    <div id="dialog-prompt-wrap" class="dialog-prompt-wrap" hidden><label class="field-label" for="dialog-prompt">手動コピー用のプロンプト</label><textarea id="dialog-prompt" readonly spellcheck="false"></textarea></div>
+    <p class="dialog-footnote">アプリが開かない場合は「Webブラウザ」を選んでください。画像の生成結果はGemini側の対応状況に依存します。</p>
+  </dialog>
 </body>
 </html>

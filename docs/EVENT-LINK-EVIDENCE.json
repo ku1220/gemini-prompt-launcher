@@ -1,0 +1,28 @@
+{
+  "source_page": "https://www.dragonquest.jp/geminiquest/event/",
+  "archived_source": "https://web.archive.org/web/20260802112709id_/https://www.dragonquest.jp/geminiquest/event/",
+  "checked_date": "2026-11-12",
+  "note": "Extracted DQ event button URLs for evidence only. They are not FF launch configuration.",
+  "buttons": [
+    {
+      "label": "マヒャド",
+      "url": "https://gemini.google.com/app/download/mobile?android-min-version=301356232&ios-min-version=322.0&is_sa=1&campaign_id=paid_jp_gemini_q3_26_gqt_ma1_2&utm_source=&utm_medium=&utm_campaign=paid_jp_gemini_q3_26_gqt_ma1_2&pt=9008&mt=8&ct=paid_jp_gemini_q3_26&mode=fast&target=image&prompt_id=5BERRMOvZW7g&prompt_action=autosubmit&redirect=home"
+    },
+    {
+      "label": "マダンテ",
+      "url": "https://gemini.google.com/app/download/mobile?android-min-version=301356232&ios-min-version=322.0&is_sa=1&campaign_id=paid_jp_gemini_q3_26_gqt_ma2_2&utm_source=&utm_medium=&utm_campaign=paid_jp_gemini_q3_26_gqt_ma2_2&pt=9008&mt=8&ct=paid_jp_gemini_q3_26&mode=fast&target=image&prompt_id=FhNSphiBckxl&prompt_action=autosubmit&redirect=home"
+    },
+    {
+      "label": "メダパニ",
+      "url": "https://gemini.google.com/app/download/mobile?android-min-version=301356232&ios-min-version=322.0&is_sa=1&campaign_id=paid_jp_gemini_q3_26_gqt_med_2&utm_source=&utm_medium=&utm_campaign=paid_jp_gemini_q3_26_gqt_med_2&pt=9008&mt=8&ct=paid_jp_gemini_q3_26&mode=fast&target=image&prompt_id=pmQuZnT45YY5&prompt_action=autosubmit&redirect=home"
+    },
+    {
+      "label": "アストロン",
+      "url": "https://gemini.google.com/app/download/mobile?android-min-version=301356232&ios-min-version=322.0&is_sa=1&campaign_id=paid_jp_gemini_q3_26_gqt_as_2&utm_source=&utm_medium=&utm_campaign=paid_jp_gemini_q3_26_gqt_as_2&pt=9008&mt=8&ct=paid_jp_gemini_q3_26&mode=fast&target=image&prompt_id=L9EPs9Yu50pr&prompt_action=autosubmit&redirect=home"
+    },
+    {
+      "label": "ラリホー",
+      "url": "https://gemini.google.com/app/download/mobile?android-min-version=301356232&ios-min-version=322.0&is_sa=1&campaign_id=paid_jp_gemini_q3_26_gqt_ra_2&utm_source=&utm_medium=&utm_campaign=paid_jp_gemini_q3_26_gqt_ra_2&pt=9008&mt=8&ct=paid_jp_gemini_q3_26&mode=fast&target=image&prompt_id=meGy6inQ3vFO&prompt_action=autosubmit&redirect=home"
+    }
+  ]
+}
