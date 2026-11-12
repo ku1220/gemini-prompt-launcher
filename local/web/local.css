@@ -2,13 +2,11 @@
 
 [hidden]{display:none!important}
 button:disabled{cursor:default;opacity:.45}
-.run-state[data-state=awaiting_photo]{border-color:#89d3bb}
 .photo-section{margin-top:44px;padding-top:35px;border-top:1px solid var(--line)}
 .photo-step{font-size:11px;color:#a9c1d2;line-height:1.7}
 .capture-layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr);gap:26px;align-items:start}
 .capture-stage{background:radial-gradient(ellipse at 50% 35%,#21344a77,transparent 65%),#0b1220;border:1px solid #9ab6d22b;border-radius:4px;aspect-ratio:4/3;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center}
 .capture-stage video,.capture-stage>img{width:100%;height:100%;object-fit:contain;display:block;background:#050a12}
-.capture-stage video{transform:scaleX(-1)}
 .camera-placeholder{padding:24px;text-align:center;color:#a5b8ce;line-height:1.9}
 .camera-placeholder>span{font:55px Georgia;color:#bed7e9;opacity:.65}
 .camera-placeholder p{font-family:var(--serif);font-size:16px;letter-spacing:1px;margin:15px 0 9px}

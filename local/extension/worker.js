@@ -1,6 +1,5 @@
 import { SPELLS } from './quest.js';
-import {buildLocalQuestPrompt as buildQuestPrompt, LOCAL_WELCOME_TEXT as WELCOME_TEXT} from './local-prompt.js';
-import { runGeminiDriver } from './gemini-driver.js';
+import {buildLocalQuestPrompt} from './local-prompt.js';
 import {runPhotoDriver} from './photo-driver.js';
 import {validatePhoto, conversationUrl} from './photo-contract.js';
 
@@ -8,7 +7,7 @@ const LOCAL_URL = 'http://127.0.0.1:4174/';
 const GEMINI_URL = 'https://gemini.google.com/app';
 const STORE_KEY = 'crystalQuestJobs';
 const running = new Set();
-const activeStates = new Set(['opening', 'filling', 'submitted', 'photo_preparing', 'photo_submitted', 'generating']);
+const activeStates = new Set(['opening', 'photo_preparing', 'photo_submitted', 'generating']);
 let serial = Promise.resolve();
 let writes = Promise.resolve();
 
@@ -78,7 +77,7 @@ async function waitForLoad(tabId, timeoutMs = 45_000) {
   throw new Error('Geminiの読み込みを確認できませんでした。');
 }
 
-async function executeDriver(tabId, args, func = runGeminiDriver) {
+async function executeDriver(tabId, args, func = runPhotoDriver) {
   const result = await chrome.scripting.executeScript({
     target: { tabId },
     world: 'ISOLATED',
@@ -89,80 +88,55 @@ async function executeDriver(tabId, args, func = runGeminiDriver) {
   return result[0].result;
 }
 
-async function runJob(requestId) {
+function freshGeminiUrl(value) {
   try {
-    const job = (await readJobs())[requestId];
-    const prompt = buildQuestPrompt(job.spellId);
-    const tab = await chrome.tabs.create({ url: GEMINI_URL, active: true });
-    await updateJob(requestId, { tabId: tab.id });
-    await waitForLoad(tab.id);
-    await updateJob(requestId, { status: 'filling', message: 'Geminiにプロンプト全文を入力しています。' });
-    const common = { prompt, welcome: WELCOME_TEXT, requestId };
-    const prepared = await executeDriver(tab.id, { ...common, phase: 'prepare', timeoutMs: 45_000 });
-    if (prepared.status !== 'ready') {
-      await updateJob(requestId, prepared);
-      return;
-    }
+    const url = new URL(value);
+    return url.origin === 'https://gemini.google.com' && url.pathname === '/app' && !url.search && !url.hash;
+  } catch {return false;}
+}
 
-    // Persist the irreversible boundary first. If the worker is interrupted,
-    // STATUS reports uncertainty; neither START nor recovery submits again.
-    await updateJob(requestId, {
-      status: 'submitted',
-      submitAttempted: true,
-      message: '送信操作を実行しています。歓迎文の表示を確認するまで再送しないでください。'
-    });
-    const result = await executeDriver(tab.id, { ...common, phase: 'send', timeoutMs: 90_000 });
-    const finalTab = await chrome.tabs.get(tab.id);
-    const finalUrl = conversationUrl(finalTab.url);
-    if (result.status === 'completed' && result.submissionConfirmed && result.welcomeMatched && finalUrl) {
-      await updateJob(requestId, {...result, status: 'awaiting_photo', url: finalUrl, message: '冒険の準備ができました。ローカル画面で撮影し、「この写真で生成」を押してください。'});
-      // Return only while our Gemini tab is still active; do not steal focus
-      // if the user has moved to an unrelated tab while waiting.
-      if (finalTab.active && job.launcherTabId) await chrome.tabs.update(job.launcherTabId, {active: true}).catch(() => {});
-    } else {
-      await updateJob(requestId, {...result, status: result.status === 'completed' ? 'needs_attention' : result.status, url: finalUrl, message: result.status === 'completed' ? '歓迎文と会話IDの確認を完了できませんでした。Geminiを確認してください。' : result.message});
-    }
-  } catch (error) {
-    const job = (await readJobs())[requestId];
-    if (job) await updateJob(requestId, {
-      status: 'needs_attention',
-      message: job.submitAttempted
-        ? '送信結果を確認できませんでした。自動再送せず、開いたGeminiを確認してください。'
-        : error.message === 'GeminiへのログインをChromeで確認してください。' ? error.message : 'Geminiを操作できませんでした。開いたタブとログイン状態を確認してください。'
-    });
-  } finally {
-    running.delete(requestId);
-  }
+async function assertFreshTab(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  if (!freshGeminiUrl(tab.url)) throw new Error('Geminiのタブが別の会話へ切り替わっています。自動送信は行いません。');
 }
 
 async function assertPhotoTab(job) {
   const expected = conversationUrl(job.url);
-  if (!expected || !Number.isInteger(job.tabId)) throw new Error('準備済みのGeminiチャットを確認できませんでした。');
+  if (!expected || !Number.isInteger(job.tabId)) throw new Error('今回のGeminiチャットを確認できませんでした。');
   const tab = await chrome.tabs.get(job.tabId);
-  if (conversationUrl(tab.url) !== expected) throw new Error('Geminiのタブが別の会話へ切り替わっています。写真は送信していません。');
+  if (conversationUrl(tab.url) !== expected) throw new Error('Geminiのタブが別の会話へ切り替わっています。');
   return expected;
 }
 
-async function runPhotoJob(requestId, photo) {
+async function runJob(requestId, photo) {
   try {
     const job = (await readJobs())[requestId];
-    const expectedUrl = await assertPhotoTab(job);
-    await chrome.tabs.update(job.tabId, {active: true});
-    const common = {expectedUrl, prompt: buildQuestPrompt(job.spellId), welcome: WELCOME_TEXT, requestId, photoRequestId: job.photoRequestId, photoDigest: job.photoDigest};
-    const prepared = await executeDriver(job.tabId, {...common, photo, phase: 'prepare', timeoutMs: 60_000}, runPhotoDriver);
-    // Drop the only worker-held image reference as soon as attachment ends.
+    const tab = await chrome.tabs.create({url: GEMINI_URL, active: true});
+    await updateJob(requestId, {tabId: tab.id});
+    await waitForLoad(tab.id);
+    await assertFreshTab(tab.id);
+    await updateJob(requestId, {status: 'photo_preparing', message: '魔法の指示と写真をGeminiに準備しています。'});
+    const common = {expectedUrl: GEMINI_URL, prompt: buildLocalQuestPrompt(job.spellId), requestId, photoRequestId: requestId, photoDigest: job.photoDigest};
+    const prepared = await executeDriver(tab.id, {...common, photo, phase: 'prepare', timeoutMs: 60_000});
+    // Never persist photo bytes; release this reference once attachment ends.
     photo = null;
     if (prepared.status !== 'photo_ready') {
       await updateJob(requestId, {...prepared, status: 'needs_attention'});
       return;
     }
-    await assertPhotoTab(job);
-    await updateJob(requestId, {status: 'photo_submitted', photoSubmitAttempted: true, message: '写真を送信しています。生成結果を確認するまで再送しないでください。'});
-    const result = await executeDriver(job.tabId, {...common, phase: 'send', timeoutMs: 240_000}, runPhotoDriver);
-    const success = result.status === 'completed' && result.photoSubmissionConfirmed === true && result.imageCount === 1;
-    await updateJob(requestId, {...result, status: success ? 'completed' : 'needs_attention', message: result.message || (success ? '戦闘シーン画像が1枚生成されました。Geminiで確認してください。' : '写真送信後の生成結果を確認できませんでした。Geminiを確認してください。')});
+    await assertFreshTab(tab.id);
+    // Save the submission boundary before the single click. Any interruption
+    // becomes an uncertain result, never an automatic second submission.
+    await updateJob(requestId, {status: 'photo_submitted', submitAttempted: true, photoSubmitAttempted: true, message: '魔法の指示と写真をまとめて送信しています。'});
+    const result = await executeDriver(tab.id, {...common, phase: 'send', timeoutMs: 240_000});
+    const finalTab = await chrome.tabs.get(tab.id);
+    const finalUrl = conversationUrl(finalTab.url);
+    const verifiedUrl = finalUrl && conversationUrl(result.url) === finalUrl ? finalUrl : null;
+    const success = result.status === 'completed' && result.photoSubmissionConfirmed === true && result.imageCount === 1 && verifiedUrl;
+    await updateJob(requestId, {...result, url: verifiedUrl, status: success ? 'completed' : 'needs_attention', message: success ? result.message || '戦闘シーン画像が1枚生成されました。Geminiで確認してください。' : result.status === 'completed' ? '生成画像と今回の会話IDの照合を完了できませんでした。Geminiを確認してください。' : result.message || '生成結果を確認できませんでした。自動再送せずGeminiを確認してください。'});
   } catch (error) {
-    await updateJob(requestId, {status: 'needs_attention', message: error.message?.includes('別の会話') ? error.message : '写真の処理結果を確認できませんでした。既に添付・送信された可能性があるため、Geminiを確認してください。自動再送は行いません。'}).catch(() => {});
+    const job = (await readJobs())[requestId];
+    if (job) await updateJob(requestId, {status: 'needs_attention', message: error.message?.includes('別の会話') || error.message?.includes('ログイン') ? error.message : '処理結果を確認できませんでした。既に添付・送信された可能性があるため、自動再送せずGeminiを確認してください。'}).catch(() => {});
   } finally {
     photo = null;
     running.delete(requestId);
@@ -180,7 +154,7 @@ async function otherJobRunning(requestId) {
 }
 
 async function handleLocal(message, sender) {
-  if (message.type === 'HELLO') return { ok: true, version: '1.1.0' };
+  if (message.type === 'HELLO') return { ok: true, version: '1.2.0' };
   if (!validRequestId(message.requestId)) return { ok: false, error: 'リクエストIDが正しくありません。' };
   if (message.type === 'STATUS') {
     const job = await currentJob(message.requestId);
@@ -192,46 +166,25 @@ async function handleLocal(message, sender) {
     try {await assertPhotoTab(job); await chrome.tabs.update(job.tabId, {active: true}); return {ok: true, job};}
     catch {return {ok: false, error: '今回のGeminiタブを確認できません。表示された会話リンクから確認してください。'};}
   }
-  if (message.type === 'PHOTO_START') {
-    if (!validRequestId(message.photoRequestId)) return {ok: false, error: '写真のリクエストIDが正しくありません。'};
-    const job = await currentJob(message.requestId);
-    if (!job) return {ok: false, error: '先に魔法を選んで冒険を開始してください。'};
-    if (job.photoRequestId && job.photoRequestId !== message.photoRequestId) return {ok: false, error: 'この冒険への写真送信は既に開始されています。再添付せず、Geminiを確認してください。'};
-    if (!job.photoRequestId && (job.status !== 'awaiting_photo' || !job.welcomeMatched || !job.submissionConfirmed)) return {ok: false, error: 'Geminiの準備が完了していません。歓迎文が表示されるまでお待ちください。'};
-    let image;
-    try {image = await validatePhoto(message.photo, job.spellId, message.photoRequestId);}
-    catch (error) {return {ok: false, error: error.message};}
-    if (job.photoRequestId) return job.photoDigest === image.metadata.photoDigest ? {ok: true, job} : {ok: false, error: '同じ写真リクエストIDに別の画像は指定できません。'};
-    if (running.has(job.requestId) || await otherJobRunning(job.requestId)) return {ok: false, error: '別の処理が進行中です。Geminiの結果を確認してください。'};
-    try {await assertPhotoTab(job);} catch (error) {return {ok: false, error: error.message};}
-    const next = await updateJob(job.requestId, {status: 'photo_preparing', photoRequestId: message.photoRequestId, ...image.metadata, photoSubmitAttempted: false, message: '今回のGeminiチャットへ写真を添付しています。'});
-    running.add(job.requestId);
-    void runPhotoJob(job.requestId, image.photo);
-    return {ok: true, job: next};
-  }
-  if (message.type !== 'START') return { ok: false, error: '未対応の操作です。' };
-  if (!SPELLS.some((spell) => spell.id === message.spellId)) return { ok: false, error: '魔法の指定が正しくありません。' };
+  if (message.type !== 'QUEST_START') return {ok: false, error: '未対応の操作です。ローカル画面を更新してください。'};
+  if (!SPELLS.some((spell) => spell.id === message.spellId)) return {ok: false, error: '魔法の指定が正しくありません。'};
+  let image;
+  try {image = await validatePhoto(message.photo, message.spellId, message.requestId);}
+  catch (error) {return {ok: false, error: error.message};}
   const previous = await currentJob(message.requestId);
-  if (previous) return previous.spellId === message.spellId ? { ok: true, job: previous } : { ok: false, error: '同じリクエストIDは別の魔法には使えません。' };
-  const jobs = await readJobs();
-  for (const old of Object.values(jobs)) {
-    if (activeStates.has(old.status)) {
-      if (running.has(old.requestId)) return { ok: false, error: '別のクエストを準備中です。先に開いたGeminiを確認してください。' };
-      await currentJob(old.requestId);
-    }
-  }
+  if (previous) return previous.spellId === message.spellId && previous.photoDigest === image.metadata.photoDigest ? {ok: true, job: previous} : {ok: false, error: '同じリクエストIDに別の魔法や写真は指定できません。'};
+  if (await otherJobRunning(message.requestId)) return {ok: false, error: '別の処理が進行中です。Geminiの結果を確認してください。'};
   const now = Date.now();
-  const job = await writeJob({ requestId: message.requestId, spellId: message.spellId, launcherTabId: sender.tab.id, status: 'opening', message: '新しいGeminiのチャットを開いています。', createdAt: now, updatedAt: now, submitAttempted: false });
+  const job = await writeJob({requestId: message.requestId, spellId: message.spellId, launcherTabId: sender.tab.id, photoRequestId: message.requestId, ...image.metadata, status: 'opening', message: 'Geminiを開き、魔法と写真をまとめて送信します。', createdAt: now, updatedAt: now, submitAttempted: false, photoSubmitAttempted: false});
   running.add(job.requestId);
-  // Return immediately so the local UI can poll while this job runs.
-  void runJob(job.requestId);
-  return { ok: true, job };
+  void runJob(job.requestId, image.photo);
+  return {ok: true, job};
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.channel === 'crystal-quest-driver' && message.type === 'HEARTBEAT') {
     // Heartbeats keep a pending executeScript job alive. They carry no content,
-    // commands or credentials and cannot change any job state.
+    // commands or credentials; only the matching running job can advance.
     if (sender.id === chrome.runtime.id && sender.frameId === 0 && /^https:\/\/gemini\.google\.com\/app(?:\/|$)/.test(sender.url || '') && running.has(message.requestId)) {
       void (async () => {
         const job = (await readJobs())[message.requestId];

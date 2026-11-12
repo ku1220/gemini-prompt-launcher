@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Crystal Quest Local",
-  "version": "1.1.0",
-  "description": "PCで撮影した写真を、準備済みのGemini会話へ送信して画像生成します。",
+  "version": "1.2.0",
+  "description": "魔法を選んでPCで撮影し、指示と写真をまとめてGeminiへ送って画像生成します。",
   "minimum_chrome_version": "120",
   "permissions": ["scripting", "storage"],
   "host_permissions": ["https://gemini.google.com/*"],

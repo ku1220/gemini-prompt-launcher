@@ -4,27 +4,28 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {createHash, webcrypto} from 'node:crypto';
 import {buildQuestPrompt} from '../dist/quest.js';
-import {PHOTO_MESSAGE} from '../local/extension/photo-driver.js';
 
 const source = (await readFile(new URL('../local/extension/photo-driver.js', import.meta.url), 'utf8')).replace(/^export /gm, '');
-const prompt = buildQuestPrompt('ultima');
-const welcome = 'ローカルの撮影画面から写真を送信してください。';
-const expectedUrl = 'https://gemini.google.com/app/testconversation123';
+const promptContext = vm.createContext({buildQuestPrompt});
+new vm.Script((await readFile(new URL('../local/extension/local-prompt.js', import.meta.url), 'utf8')).replace(/^import .*;\n/gm, '').replace(/^export /gm, '')).runInContext(promptContext);
+const prompt = promptContext.buildLocalQuestPrompt('ultima');
+const expectedUrl = 'https://gemini.google.com/app';
+const generatedUrl = 'https://gemini.google.com/app/newconversation123';
 const requestId = 'quest-request-00000001';
 const photoRequestId = 'photo-request-00000001';
 const photo = {name: 'crystal-quest.jpg', mime: 'image/jpeg', size: 3, dataUrl: 'data:image/jpeg;base64,/9j/'};
 const photoBytes = Buffer.from('/9j/', 'base64');
 const photoDigest = createHash('sha256').update(photoBytes).digest('hex');
 
-function fixture({url = expectedUrl, prepared = false, markerMissing = false, outputCount = 1, responseText = '', wrongUserPrompt = false, existingDraft = '', restoredDraft = '', avatarOnly = false, uploadStillBusy = false, noFileInput = false, pasteAccepted = true, unnamedPreview = false, blobBytes = photoBytes, previewSource, navigateOnFetch = false} = {}) {
+function fixture({url = expectedUrl, prepared = false, markerMissing = false, outputCount = 1, responseText = '', wrongUserPrompt = false, labelledQuery = false, hasHistory = false, hasExistingAttachment = false, finalUrl = generatedUrl, navigateAfterBinding = false, existingDraft = '', restoredDraft = '', avatarOnly = false, uploadStillBusy = false, noFileInput = false, pasteAccepted = true, unnamedPreview = false, blobBytes = photoBytes, previewSource, navigateOnFetch = false} = {}) {
   let clock = 1000;
   let clicked = 0;
   let uploadCount = 0;
   let pasteCount = 0;
   let fetchCount = 0;
   let context;
-  let uploaded = prepared;
-  let inputText = prepared ? PHOTO_MESSAGE : existingDraft;
+  let uploaded = prepared || hasExistingAttachment;
+  let inputText = prepared ? prompt : existingDraft;
   const attrs = (values = {}) => (key) => values[key] ?? null;
   function node(text = '', properties = {}) {
     return {innerText: text, isConnected: true, contains: () => false, getClientRects: () => [{width: 400, height: 300}], getBoundingClientRect: () => ({width: 400, height: 300}), getAttribute: attrs(), querySelectorAll: () => [], ...properties};
@@ -58,24 +59,31 @@ function fixture({url = expectedUrl, prepared = false, markerMissing = false, ou
       if (pasteAccepted) {uploadCount++; uploaded = true;}
     }
   }, closest: () => composer}));
-  const firstUser = node(wrongUserPrompt ? 'another quest' : prompt);
-  const photoUser = node(PHOTO_MESSAGE, {querySelectorAll: (selector) => selector === 'img' ? [uploadedImg] : []});
-  const welcomeBlock = node(welcome);
-  const firstModel = node(welcome, {querySelectorAll: (selector) => selector === 'img' ? [img('https://example.test/avatar.png', 24)] : []});
+  const firstUser = node('以前の会話');
+  const sentPrompt = wrongUserPrompt ? 'another quest' : prompt;
+  const queryLines = sentPrompt.split('\n').map((text) => node(text));
+  const nestedLine = node(queryLines[0].innerText);
+  queryLines[0].contains = (other) => other === nestedLine;
+  const photoUser = node(labelledQuery ? `あなたのプロンプト ${prompt.slice(0, 111)}…\n${sentPrompt}` : sentPrompt, {querySelectorAll(selector) {
+    if (selector === 'img') return [uploadedImg];
+    if (selector === '.query-text-line') return labelledQuery ? [queryLines[0], nestedLine, ...queryLines.slice(1)] : [];
+    return [];
+  }});
+  const firstModel = node('以前の回答');
   const outputImages = Array.from({length: outputCount}, (_, index) => img(`blob:generated-${index}`, avatarOnly ? 24 : 400));
   const imageModel = node(responseText, {querySelectorAll: (selector) => selector === 'img' ? outputImages : []});
-  const send = node('', {disabled: false, click() {clicked++; inputText = restoredDraft; uploaded = false;}});
+  const send = node('', {disabled: false, click() {clicked++; inputText = restoredDraft; uploaded = false; context.location = new URL(finalUrl);}});
   const root = node('', {querySelectorAll(selector) {
     if (selector === 'rich-textarea [contenteditable="true"][role="textbox"]') return [editor];
-    if (selector === 'user-query') return clicked ? [firstUser, photoUser] : [firstUser];
-    if (selector === 'model-response') return clicked ? [firstModel, imageModel] : [firstModel];
-    if (selector === 'model-response .markdown') return clicked && responseText ? [welcomeBlock, node(responseText)] : [welcomeBlock];
+    if (selector === 'user-query') return clicked ? [photoUser] : hasHistory ? [firstUser] : [];
+    if (selector === 'model-response') return clicked ? [imageModel] : hasHistory ? [firstModel] : [];
+    if (selector === 'model-response .markdown') return clicked && responseText ? [node(responseText)] : [];
     if (selector === 'button[aria-label="プロンプトを送信"]') return [send];
     if (selector === 'input[type="file"]') return noFileInput ? [] : [fileInput];
     return [];
   }});
   const dataset = {};
-  if (prepared && !markerMissing) dataset.crystalQuestPhoto = JSON.stringify({requestId, photoRequestId, name: photo.name, size: photo.size, mime: photo.mime, digest: photoDigest, expectedPath: new URL(expectedUrl).pathname, userCount: 1, modelCount: 1, sent: false});
+  if (prepared && !markerMissing) dataset.crystalQuestPhoto = JSON.stringify({requestId, photoRequestId, name: photo.name, size: photo.size, mime: photo.mime, digest: photoDigest, expectedPath: new URL(expectedUrl).pathname, userCount: 0, modelCount: 0, sent: false});
   class FakeFile {
     constructor(parts, name, options) {this.name = name; this.type = options.type; this.size = parts.reduce((sum, part) => sum + part.length, 0);}
   }
@@ -86,7 +94,7 @@ function fixture({url = expectedUrl, prepared = false, markerMissing = false, ou
     URL, location: new URL(url), window: {}, document: {querySelector: () => root, querySelectorAll: (selector) => root.querySelectorAll(selector), body: root, documentElement: {dataset}},
     getComputedStyle: () => ({display: 'block', visibility: 'visible'}),
     Date: {now: () => clock},
-    setTimeout(fn, ms) {return setTimeout(() => {clock += ms; fn();}, 0);},
+    setTimeout(fn, ms) {return setTimeout(() => {clock += ms; if (clicked && navigateAfterBinding) context.location = new URL('https://gemini.google.com/app/anotherconversation'); fn();}, 0);},
     setInterval, clearInterval,
     atob: (text) => Buffer.from(text, 'base64').toString('binary'),
     File: FakeFile, DataTransfer: FakeDataTransfer, HTMLTextAreaElement: FakeTextArea,
@@ -107,12 +115,12 @@ function fixture({url = expectedUrl, prepared = false, markerMissing = false, ou
   new vm.Script(source).runInContext(context);
   return {
     clicks: () => clicked, uploads: () => uploadCount, pastes: () => pasteCount, fetches: () => fetchCount, draft: () => inputText, dataset, fileInput,
-    run: (extra = {}) => context.runPhotoDriver({phase: 'send', expectedUrl, prompt, welcome, requestId, photoRequestId, photoDigest, timeoutMs: 6000, ...extra}),
+    run: (extra = {}) => context.runPhotoDriver({phase: 'send', expectedUrl, prompt, requestId, photoRequestId, photoDigest, timeoutMs: 6000, ...extra}),
   };
 }
 
-test('another conversation or a changed quest cannot attach or send a photo', async () => {
-  for (const change of [{url: 'https://gemini.google.com/app/otherconversation'}, {url: 'https://example.com/app/testconversation123'}, {wrongUserPrompt: true}]) {
+test('another conversation, origin or existing history cannot attach or send a photo', async () => {
+  for (const change of [{url: 'https://gemini.google.com/app/otherconversation'}, {url: 'https://example.com/app/testconversation123'}, {hasHistory: true}]) {
     const driver = fixture(change);
     assert.equal((await driver.run({phase: 'prepare', photo})).status, 'needs_attention');
     assert.equal(driver.uploads(), 0);
@@ -128,6 +136,8 @@ test('prepare verifies a single uploaded image before returning photo_ready', as
   assert.equal(driver.uploads(), 1);
   assert.equal(driver.clicks(), 0);
   assert.equal(JSON.parse(driver.dataset.crystalQuestPhoto).photoRequestId, photoRequestId);
+  assert.equal(driver.draft(), prompt);
+  assert.equal(JSON.parse(driver.dataset.crystalQuestPhoto).userCount, 0);
 });
 
 test('Gemini without a file input receives one file-paste event and waits for the preview', async () => {
@@ -196,7 +206,7 @@ test('a conversation switch while hashing the preview prevents send', async () =
 });
 
 test('invalid image bytes, unrelated draft or an unfinished upload never sends', async () => {
-  for (const change of [{existingDraft: '大事な未送信の下書き'}, {uploadStillBusy: true}]) {
+  for (const change of [{existingDraft: '大事な未送信の下書き'}, {hasExistingAttachment: true}, {uploadStillBusy: true}]) {
     const driver = fixture(change);
     assert.equal((await driver.run({phase: 'prepare', photo, timeoutMs: 1000})).status, 'needs_attention');
     assert.equal(driver.clicks(), 0);
@@ -231,6 +241,7 @@ test('one new model image completes the flow after exactly one send', async () =
   const result = await driver.run();
   assert.equal(result.status, 'completed');
   assert.equal(result.imageCount, 1);
+  assert.equal(result.url, generatedUrl);
   assert.equal(result.photoSubmissionConfirmed, true);
   assert.equal(driver.clicks(), 1);
   // Replaying the send phase cannot click again, even within the same DOM.
@@ -238,8 +249,47 @@ test('one new model image completes the flow after exactly one send', async () =
   assert.equal(driver.clicks(), 1);
 });
 
+test('Gemini screen-reader query headings are excluded while full prompt lines match exactly', async () => {
+  const labelled = fixture({prepared: true, labelledQuery: true});
+  const result = await labelled.run();
+  assert.equal(result.status, 'completed');
+  assert.equal(result.photoSubmissionConfirmed, true);
+  assert.equal(result.imageCount, 1);
+  assert.equal(labelled.clicks(), 1);
+
+  const wrongBody = fixture({prepared: true, labelledQuery: true, wrongUserPrompt: true});
+  const mismatch = await wrongBody.run({timeoutMs: 1200});
+  assert.equal(mismatch.status, 'needs_attention');
+  assert.equal(mismatch.photoSubmissionConfirmed, false);
+  assert.equal(wrongBody.clicks(), 1);
+});
+
+test('a created conversation is bound once and another chat cannot supply the result', async () => {
+  const moved = fixture({prepared: true, navigateAfterBinding: true});
+  const result = await moved.run();
+  assert.equal(result.status, 'needs_attention');
+  assert.equal(moved.clicks(), 1);
+  assert.match(result.message, /別の会話/);
+
+  const noConversation = fixture({prepared: true, finalUrl: expectedUrl});
+  assert.equal((await noConversation.run()).status, 'needs_attention');
+  assert.equal(noConversation.clicks(), 1);
+});
+
+test('a different or partial sent prompt is not a confirmed combined submission', async () => {
+  const wrongPrompt = fixture({prepared: true, wrongUserPrompt: true});
+  const result = await wrongPrompt.run({timeoutMs: 1200});
+  assert.equal(result.status, 'needs_attention');
+  assert.equal(result.photoSubmissionConfirmed, false);
+  assert.equal(wrongPrompt.clicks(), 1);
+
+  const changedInput = fixture({prepared: true});
+  assert.equal((await changedInput.run({prompt: `${prompt}\n別の指示`})).status, 'needs_attention');
+  assert.equal(changedInput.clicks(), 0);
+});
+
 test('a restored sent instruction is cleared after completion while a new user draft is preserved', async () => {
-  const restored = fixture({prepared: true, restoredDraft: PHOTO_MESSAGE});
+  const restored = fixture({prepared: true, restoredDraft: prompt});
   const completed = await restored.run();
   assert.equal(completed.status, 'completed');
   assert.equal(completed.draftCleared, true);
@@ -253,9 +303,9 @@ test('a restored sent instruction is cleared after completion while a new user d
   assert.equal(newDraft.draft(), '次に聞きたい大切な内容');
   assert.equal(newDraft.clicks(), 1);
 
-  const pending = fixture({prepared: true, restoredDraft: PHOTO_MESSAGE, outputCount: 0});
+  const pending = fixture({prepared: true, restoredDraft: prompt, outputCount: 0});
   assert.equal((await pending.run({timeoutMs: 1200})).status, 'needs_attention');
-  assert.equal(pending.draft(), PHOTO_MESSAGE);
+  assert.equal(pending.draft(), prompt);
   assert.equal(pending.clicks(), 1);
 });
 

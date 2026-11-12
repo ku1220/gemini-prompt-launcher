@@ -24,7 +24,7 @@ test('rejects non-loopback Host, foreign Origin and writes', async () => {
 });
 test('local metadata and responses prevent embedding and content sniffing', async () => {
   const result = await request('/local-info.json');
-  assert.deepEqual(JSON.parse(result.body), {extensionPath: '/example/extension', version: '1.1.0'});
+  assert.deepEqual(JSON.parse(result.body), {extensionPath: '/example/extension', version: '1.2.0'});
   assert.equal(result.headers['X-Frame-Options'], 'DENY');
   assert.equal(result.headers['X-Content-Type-Options'], 'nosniff');
   assert.equal(result.headers['Access-Control-Allow-Origin'], undefined);

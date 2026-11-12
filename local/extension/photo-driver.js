@@ -1,15 +1,11 @@
-export const PHOTO_MESSAGE = 'この写真の人物を、先ほど選択した魔法を放つ姿に変換し、完成画像を1枚生成してください。';
-
 // Chrome serializes this function for executeScript. Keep all dependencies
 // inside it. Photo bytes live only for the duration of the prepare call.
 export async function runPhotoDriver(options) {
-  const {phase, expectedUrl, prompt, welcome, requestId, photoRequestId, photoDigest, photo} = options;
-  const photoMessage = 'この写真の人物を、先ほど選択した魔法を放つ姿に変換し、完成画像を1枚生成してください。';
+  const {phase, expectedUrl, prompt, requestId, photoRequestId, photoDigest, photo} = options;
   const timeoutMs = Math.min(Math.max(Number(options.timeoutMs) || 60_000, 1), phase === 'send' ? 240_000 : 60_000);
   const started = Date.now();
   const markerKey = 'crystalQuestPhoto';
   const normalize = (text) => String(text ?? '').replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').replace(/\n+/g, '\n').trim();
-  const compact = (text) => normalize(text).replace(/\s+/g, '');
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const attention = (message, extra = {}) => ({status: 'needs_attention', message, ...extra});
   const visible = (element) => {
@@ -21,8 +17,13 @@ export async function runPhotoDriver(options) {
   const nodes = (selectors, scope = root(), onlyVisible = true) => [...new Set(selectors.flatMap((selector) => [...scope.querySelectorAll(selector)]))].filter((node) => !onlyVisible || visible(node));
   const outermost = (items) => items.filter((item) => !items.some((other) => other !== item && other.contains(item)));
   const users = () => outermost(nodes(['user-query', '[data-test-id="user-query"]']));
+  const userText = (query) => {
+    // Gemini adds a screen-reader heading containing a shortened copy before
+    // the real prompt. Read only its displayed lines, without nested repeats.
+    const lines = outermost(nodes(['.query-text-line'], query));
+    return lines.length ? lines.map((line) => line.innerText).join('\n') : query.innerText;
+  };
   const models = () => outermost(nodes(['model-response', '[data-test-id="model-response"]']));
-  const textBlocks = () => outermost(nodes(['model-response .markdown', 'model-response .model-response-text', '[data-test-id="model-response"] .markdown']));
   const editors = () => nodes(['rich-textarea [contenteditable="true"][role="textbox"]', '.ql-editor[contenteditable="true"]', 'textarea[aria-label="Gemini に相談"]', 'textarea[aria-label="Enter a prompt here"]']);
   const editorText = (editor) => typeof editor.value === 'string' ? editor.value : editor.innerText;
   const enabled = (button) => !button.disabled && button.getAttribute('aria-disabled') !== 'true';
@@ -34,12 +35,20 @@ export async function runPhotoDriver(options) {
   });
   const uniqueImages = (items) => [...new Map(items.map((image) => [image.currentSrc || image.src, image])).values()];
   let expectedPath;
+  let boundPath = null;
+  let submitted = false;
   try {
     const target = new URL(expectedUrl);
-    if (target.origin !== 'https://gemini.google.com' || !/^\/app\/[a-zA-Z0-9_-]+$/.test(target.pathname)) return attention('準備済みのGeminiチャットを特定できません。写真は送信していません。');
+    if (target.origin !== 'https://gemini.google.com' || target.pathname !== '/app' || target.search || target.hash) return attention('新しいGeminiチャットを特定できません。写真は送信していません。');
     expectedPath = target.pathname;
   } catch {return attention('チャットのURLが正しくありません。写真は送信していません。');}
-  const allowed = () => window === window.top && location.origin === 'https://gemini.google.com' && location.pathname === expectedPath;
+  const allowed = () => {
+    if (window !== window.top || location.origin !== 'https://gemini.google.com') return false;
+    if (!submitted) return location.pathname === expectedPath;
+    if (boundPath) return location.pathname === boundPath;
+    if (/^\/app\/[a-zA-Z0-9_-]+$/.test(location.pathname)) {boundPath = location.pathname; return true;}
+    return location.pathname === expectedPath;
+  };
   const getMarker = () => {
     try {return JSON.parse(document.documentElement.dataset[markerKey] || 'null');} catch {return null;}
   };
@@ -48,15 +57,7 @@ export async function runPhotoDriver(options) {
     try {chrome.runtime.sendMessage({channel: 'crystal-quest-driver', type: 'HEARTBEAT', requestId, photoRequestId, stage: phase === 'send' ? 'generating' : 'photo_preparing'}).catch(() => {});} catch { /* Extension can be reloaded while the chat stays open. */ }
   }, 10_000);
 
-  function questContext() {
-    if (!allowed()) return false;
-    const bubbles = users();
-    const replies = models();
-    if (bubbles.length !== 1 || replies.length < 1 || generating()) return false;
-    if (!compact(bubbles[0].innerText).includes(compact(prompt))) return false;
-    if (uniqueImages(replies.flatMap(imageNodes)).length) return false;
-    return compact(textBlocks().map((node) => node.innerText).join('\n')) === compact(welcome);
-  }
+  function questContext() {return allowed() && users().length === 0 && models().length === 0 && !generating();}
 
   function composer(editor) {
     return editor.closest('input-area-v2, input-container, input-area, .input-area-container, .input-container, form') || root();
@@ -122,7 +123,7 @@ export async function runPhotoDriver(options) {
   function clearSentDraft(editor) {
     // Only clear our exact already-sent instruction after the completed output
     // is confirmed. Preserve a user's new draft or attachment without changes.
-    if (!allowed() || !editor.isConnected || normalize(editorText(editor)) !== normalize(photoMessage)) return false;
+    if (!allowed() || !editor.isConnected || normalize(editorText(editor)) !== normalize(prompt)) return false;
     if (nodes(['img', 'uploader-file-preview', 'file-preview', '.file-preview', '[role="progressbar"]'], composer(editor)).length) return false;
     if (nodes(['button[aria-label="添付ファイルを閉じる"]', 'button[aria-label*="削除"]', 'button[aria-label*="Remove"]', 'button[aria-label="Close attachment"]'], composer(editor)).length) return false;
     editor.focus();
@@ -142,9 +143,14 @@ export async function runPhotoDriver(options) {
 
   try {
     if (!allowed()) return attention('別のGeminiチャットに切り替わっています。写真は送信していません。');
-    if (!['prepare', 'send'].includes(phase) || typeof prompt !== 'string' || !prompt || typeof welcome !== 'string' || !welcome || typeof photoRequestId !== 'string' || !/^[\w-]{16,80}$/.test(photoRequestId)) return {status: 'failed', message: '写真送信のデータが正しくありません。'};
-    if (!questContext()) return attention('準備した会話・歓迎文を確認できません。別の会話には写真を送信しません。');
-    const foundEditors = editors();
+    if (!['prepare', 'send'].includes(phase) || typeof prompt !== 'string' || !prompt || typeof photoRequestId !== 'string' || !/^[\w-]{16,80}$/.test(photoRequestId)) return {status: 'failed', message: '写真送信のデータが正しくありません。'};
+    if (!questContext()) return attention('新しい空のGeminiチャットを確認できません。既存の会話には写真を送信しません。');
+    let foundEditors = editors();
+    while (phase === 'prepare' && foundEditors.length === 0 && Date.now() - started < timeoutMs) {
+      await sleep(200);
+      if (!questContext()) return attention('入力画面の準備中に会話が変わりました。写真は送信していません。');
+      foundEditors = editors();
+    }
     if (foundEditors.length !== 1) return attention('写真を送る入力欄を1つに特定できません。');
     const editor = foundEditors[0];
 
@@ -185,9 +191,10 @@ export async function runPhotoDriver(options) {
         if (state.count > 1) return attention('添付画像が複数あります。自動送信は行いません。');
         if (state.ready) readySince ??= Date.now(); else readySince = null;
         if (readySince && Date.now() - readySince >= 800) {
-          if (!messageFilled && !fill(editor, photoMessage)) return attention('写真と一緒に送る指示の入力を確認できません。');
+          if (!messageFilled && normalize(editorText(editor))) return attention('添付中に下書きが入力されました。上書きせず停止しました。');
+          if (!messageFilled && !fill(editor, prompt)) return attention('写真と一緒に送る指示の入力を確認できません。');
           messageFilled = true;
-          if (normalize(editorText(editor)) !== normalize(photoMessage)) return attention('送信内容が変更されています。自動送信は行いません。');
+          if (normalize(editorText(editor)) !== normalize(prompt)) return attention('送信内容が変更されています。自動送信は行いません。');
           const buttons = sendButtons();
           if (buttons.length === 1 && enabled(buttons[0])) {
             setMarker(marker);
@@ -202,12 +209,13 @@ export async function runPhotoDriver(options) {
     const marker = getMarker();
     if (!marker || marker.sent || marker.requestId !== requestId || marker.photoRequestId !== photoRequestId || marker.digest !== photoDigest || marker.expectedPath !== expectedPath || marker.userCount !== users().length || marker.modelCount !== models().length) return attention('この写真の送信準備を確認できません。自動再送は行いません。');
     const preparedAttachment = await attachment(editor, marker);
-    if (!allowed() || !questContext() || !editor.isConnected || normalize(editorText(editor)) !== normalize(photoMessage) || !preparedAttachment.ready || (preparedAttachment.image.currentSrc || preparedAttachment.image.src) !== preparedAttachment.previewSource) return attention('写真・会話・送信内容が変更されています。自動送信を中止しました。');
+    if (!allowed() || !questContext() || !editor.isConnected || normalize(editorText(editor)) !== normalize(prompt) || !preparedAttachment.ready || (preparedAttachment.image.currentSrc || preparedAttachment.image.src) !== preparedAttachment.previewSource) return attention('写真・会話・送信内容が変更されています。自動送信を中止しました。');
     const buttons = sendButtons();
     if (buttons.length !== 1 || !enabled(buttons[0])) return attention('写真を送信するボタンを確認できません。');
     // This supplement prevents repeat clicks within the same DOM too. The
     // worker's durable submit boundary remains the source of replay safety.
     setMarker({...marker, sent: true});
+    submitted = true;
     buttons[0].click();
     let submissionConfirmed = false;
     let imageSince = null;
@@ -218,11 +226,12 @@ export async function runPhotoDriver(options) {
       if (!allowed()) return attention('送信後に別の会話へ切り替わりました。元のGeminiで結果を確認してください。', {photoSubmissionConfirmed: submissionConfirmed});
       const latestUsers = users();
       const newUsers = latestUsers.slice(marker.userCount);
+      if (newUsers.length > 1) return attention('送信後に別のメッセージが追加されました。Geminiで結果を確認してください。', {photoSubmissionConfirmed: submissionConfirmed});
       const userPhotos = newUsers.length === 1 ? uniqueImages(nodes(['img'], newUsers[0]).filter((image) => {
         const rect = image.getBoundingClientRect();
         return image.complete && image.naturalWidth > 0 && rect.width >= 48 && rect.height >= 48 && Boolean(image.currentSrc || image.src);
       })) : [];
-      submissionConfirmed ||= newUsers.length === 1 && compact(newUsers[0].innerText).includes(compact(photoMessage)) && userPhotos.length === 1;
+      submissionConfirmed ||= newUsers.length === 1 && normalize(userText(newUsers[0])) === normalize(prompt) && userPhotos.length === 1;
       const newModels = models().slice(marker.modelCount);
       const outputs = uniqueImages(newModels.flatMap(imageNodes));
       if (outputs.length > 1) return attention('画像が複数生成されました。Geminiで結果を確認してください。', {photoSubmissionConfirmed: submissionConfirmed, imageCount: outputs.length});
@@ -234,7 +243,11 @@ export async function runPhotoDriver(options) {
       if (reply && reply === lastReply && !generating()) replyStableSince ??= Date.now(); else replyStableSince = null;
       lastReply = reply;
       if (submissionConfirmed && outputs.length === 1 && !generating()) imageSince ??= Date.now(); else imageSince = null;
-      if (imageSince && Date.now() - imageSince >= 2000) return {status: 'completed', message: '戦闘シーンの画像1枚の生成を確認しました。Geminiで画像を保存できます。', imageCount: 1, photoSubmissionConfirmed: true, draftCleared: clearSentDraft(editor)};
+      if (imageSince && Date.now() - imageSince >= 2000 && boundPath) {
+        let draftCleared = false;
+        try {draftCleared = clearSentDraft(editor);} catch { /* Draft cleanup must not turn a confirmed image into failure. */ }
+        return {status: 'completed', message: '戦闘シーンの画像1枚の生成を確認しました。Geminiで画像を保存できます。', imageCount: 1, photoSubmissionConfirmed: true, url: `https://gemini.google.com${boundPath}`, draftCleared};
+      }
       if (submissionConfirmed && !outputs.length && replyStableSince && Date.now() - replyStableSince >= 12_000) return attention('写真の送信を確認しましたが、画像は生成されていません。Geminiの返答や利用上限を確認してください。', {photoSubmissionConfirmed: true, imageCount: 0});
       await sleep(400);
     }

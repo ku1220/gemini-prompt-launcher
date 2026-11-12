@@ -5,21 +5,20 @@ import {CameraCapture} from './camera.js';
 const $ = (id) => document.getElementById(id);
 const channel = 'crystal-quest-local';
 const terminal = new Set(['completed', 'failed', 'needs_attention']);
-const photoProcessing = new Set(['photo_preparing', 'photo_submitted', 'generating']);
+const processing = new Set(['opening', 'photo_preparing', 'photo_submitted', 'generating']);
 let selectedId = 'ultima';
 let connected = false;
 let busy = false;
+// The attempt ID is saved before dispatch; never persist photo bytes or retry
+// an uncertain request after reload. Capturing alone creates no request.
 let currentId = sessionStorage.getItem('quest-local-request') || null;
 let currentJob = null;
 let restoring = Boolean(currentId);
 let pollTimer;
 let polling = false;
-let photoDispatchInFlight = false;
 let cameraErrorText = '';
 let previewReady = false;
 let previewErrorText = '';
-let pendingPhoto = null;
-try {pendingPhoto = JSON.parse(sessionStorage.getItem('quest-local-photo-request') || 'null');} catch { /* No recoverable photo attempt. */ }
 const pending = new Map();
 const symbols = ['✧', '✹', '✦', 'ϟ', '❄', '☄'];
 
@@ -36,14 +35,13 @@ function rpc(type, data = {}) {
     const timer = setTimeout(() => {
       pending.delete(rpcId);
       resolve({ok: false, transportFailure: true, error: '拡張機能から応答がありません。Chromeでこのページを開き、拡張機能の更新と接続を確認してください。'});
-    }, type === 'PHOTO_START' ? 10_000 : 4000);
+    }, type === 'QUEST_START' ? 10_000 : 4000);
     pending.set(rpcId, (result) => {clearTimeout(timer); pending.delete(rpcId); resolve(result);});
     window.postMessage({channel, direction: 'request', rpcId, type, ...data}, location.origin);
   });
 }
 
-function photoAttempted() {return pendingPhoto?.requestId === currentId || Boolean(currentJob?.photoRequestId || currentJob?.photoSubmitAttempted);}
-function readyForPhoto() {return connected && !busy && currentJob?.status === 'awaiting_photo' && !photoAttempted();}
+function readyForPhoto() {return connected && !busy && !restoring && !currentId;}
 
 const camera = new CameraCapture({
   video: $('camera-video'), canvas: $('camera-canvas'),
@@ -74,12 +72,11 @@ $('photo-preview').addEventListener('error', () => {
 function renderCamera() {
   const ready = readyForPhoto();
   const working = ['requesting', 'capturing'].includes(camera.state);
-  const attempted = photoAttempted();
   $('capture-stage').dataset.cameraState = camera.state;
   $('camera-video').hidden = camera.state !== 'live';
   $('photo-preview').hidden = !camera.photo;
   $('camera-placeholder').hidden = camera.state === 'live' || Boolean(camera.photo);
-  $('camera-placeholder').querySelector('small').textContent = camera.state === 'requesting' ? 'カメラの使用許可を待っています。' : camera.state === 'capturing' ? '写真を準備しています。' : ready ? 'カメラを起動するか、保存済みの写真を選んでください。' : 'クエストを開始すると、撮影できるようになります。';
+  $('camera-placeholder').querySelector('small').textContent = camera.state === 'requesting' ? 'カメラの使用許可を待っています。' : camera.state === 'capturing' ? '写真を準備しています。' : ready ? 'カメラを起動するか、保存済みの写真を選んでください。' : '拡張機能への接続を確認してください。';
   $('camera-start').hidden = camera.state === 'live' || Boolean(camera.photo);
   $('camera-start').disabled = !ready || working;
   $('capture').hidden = Boolean(camera.photo);
@@ -90,28 +87,28 @@ function renderCamera() {
   $('photo-file').disabled = !ready || working;
   $('camera-device').disabled = !ready || working || Boolean(camera.photo);
   $('send-photo').disabled = !ready || !camera.photo || !camera.previewUrl || !previewReady || camera.state !== 'photo';
-  $('send-photo').textContent = busy && photoProcessing.has(currentJob?.status) ? '画像を生成しています…' : attempted ? 'この写真の送信は終了しています' : 'この写真で生成';
+  $('send-photo').textContent = busy || restoring ? '画像を生成しています…' : currentId ? 'この写真の送信は終了しています' : 'この写真で生成';
   let message;
   if (previewErrorText && ready) message = previewErrorText;
   else if (camera.state === 'error' && ready) message = cameraErrorText;
-  else if (photoProcessing.has(currentJob?.status)) message = '確認した写真をGeminiへ送信し、画像生成の完了を待っています。';
+  else if (processing.has(currentJob?.status)) message = '選んだ魔法の指示と写真をまとめてGeminiへ送り、画像生成の完了を待っています。';
   else if (currentJob?.status === 'completed') message = 'Geminiで画像の生成を確認しました。新しい冒険では、別の写真や魔法を使えます。';
-  else if (attempted) message = 'この冒険では写真の送信を開始済みです。重複送信を避けるため、Geminiの結果を確認してください。';
-  else if (!ready) message = 'まずは魔法を選んで冒険を開始してください。準備ができると、この画面で撮影できます。';
+  else if (currentId) message = 'この冒険では送信を開始済みです。重複送信を避けるため、Geminiの結果を確認してください。';
+  else if (!ready) message = 'Chrome拡張機能に接続すると、この画面で写真を用意できます。';
   else if (camera.state === 'requesting') message = 'カメラの使用許可を待っています。許可すると、この画面にプレビューが表示されます。';
   else if (camera.state === 'capturing') message = '写真のプレビューを準備しています。';
   else if (camera.state === 'live') message = 'あなたとまものが写るように構え、「この瞬間を撮影」を押してください。';
-  else if (camera.photo) message = '送信する写真を確認してください。よければ「この写真で生成」を押してください。';
-  else message = '冒険の準備ができました。「カメラを起動」または「保存済みの写真を選ぶ」から写真を用意してください。';
+  else if (camera.photo) message = `「${getSpell(selectedId).name}」で生成する写真を確認し、よければ「この写真で生成」を押してください。`;
+  else message = '選んだ魔法で冒険の一枚を。「カメラを起動」または「保存済みの写真を選ぶ」から写真を用意してください。';
   $('camera-message').textContent = message;
   $('camera-message').dataset.error = String(camera.state === 'error' || Boolean(previewErrorText));
-  $('photo-step').textContent = currentJob?.status === 'completed' ? '画像ができました' : photoProcessing.has(currentJob?.status) ? 'Geminiで画像を生成中' : ready ? '写真を撮って、魔法の世界へ' : attempted ? 'Geminiの結果を確認' : 'まずは魔法を選んで開始';
+  $('photo-step').textContent = currentJob?.status === 'completed' ? '画像ができました' : busy || restoring ? 'Geminiで画像を生成中' : currentId ? 'Geminiの結果を確認' : `選択中の魔法：${getSpell(selectedId).name}`;
 }
 
 function updateButton() {
-  const locked = busy || restoring || Boolean(currentJob);
+  const locked = busy || restoring || Boolean(currentId);
   $('start').disabled = !connected || locked;
-  $('start').textContent = !connected ? '拡張機能を追加・更新してください' : currentJob?.status === 'awaiting_photo' ? '下の画面で写真を撮影してください' : currentJob?.status === 'completed' ? '冒険の一枚ができました' : busy || restoring ? 'Geminiを準備しています…' : `${getSpell(selectedId).name}で冒険をはじめる`;
+  $('start').textContent = !connected ? '拡張機能を追加・更新してください' : currentJob?.status === 'completed' ? '冒険の一枚ができました' : locked ? 'Geminiの結果を確認してください' : camera.photo ? '下の写真を確認して生成' : `${getSpell(selectedId).name}で写真を撮る`;
   document.querySelectorAll('input[name=spell]').forEach((input) => {input.disabled = locked;});
   $('reset').hidden = !currentJob || !terminal.has(currentJob.status);
   $('reset').disabled = busy || restoring;
@@ -138,7 +135,7 @@ SPELLS.forEach((spell, index) => {
   for (const [className, tag, text] of [['spell-check', 'span', '✓'], ['spell-symbol', 'span', symbols[index]], ['spell-english', 'span', spell.english], ['', 'strong', spell.name], ['spell-element', 'span', '写真から、魔法の世界へ']]) {
     const part = document.createElement(tag); part.className = className; part.textContent = text; card.append(part);
   }
-  radio.addEventListener('change', () => {if (radio.checked && !currentJob && !busy) {selectedId = spell.id; renderSpell();}});
+  radio.addEventListener('change', () => {if (radio.checked && !currentId && !busy && !restoring) {selectedId = spell.id; renderSpell();}});
   label.append(radio, card); $('spells').append(label);
 });
 
@@ -150,32 +147,28 @@ function notice(title, detail, state = '') {
 
 function showJob(job) {
   if (!job || (currentJob?.updatedAt && job.updatedAt && job.updatedAt < currentJob.updatedAt)) return busy;
-  if (job.status === 'awaiting_photo' && pendingPhoto?.requestId === currentId && !job.photoRequestId) {
-    if (photoDispatchInFlight) return busy;
-    uncertain('写真の送信要求が受け付けられたか確認できません。');
+  if (!processing.has(job.status) && !terminal.has(job.status)) {
+    uncertain('旧バージョンの冒険は継続できません。開いているGeminiを確認して、新しい冒険を準備してください。');
     return false;
   }
-  currentJob = {...job, status: job.status || job.state};
+  currentJob = {...job};
   const state = currentJob.status;
-  busy = state !== 'awaiting_photo' && !terminal.has(state);
+  busy = processing.has(state);
   const spell = getSpell(job.spellId);
   selectedId = spell.id;
   document.querySelector(`input[value="${spell.id}"]`).checked = true;
-  if (state !== 'awaiting_photo' && ['live', 'requesting', 'capturing'].includes(camera.state)) camera.stop();
+  if (['live', 'requesting', 'capturing'].includes(camera.state)) camera.stop();
   renderSpell();
   const texts = {
-    opening: ['Geminiを開いています。', '新しいチャットの入力欄を待っています。'],
-    filling: ['クエストの指示を入力しています。', '全文を確認し、送信は1回だけ行います。'],
-    submitted: ['指示を送信しています。', '送信操作とGeminiからの歓迎文を確認しています。'],
-    awaiting_photo: ['冒険の準備ができました。', '下の撮影画面から写真を用意し、「この写真で生成」を押してください。'],
-    photo_preparing: ['写真を添付しています。', '準備した同じGeminiチャットで、写真の添付を確認しています。'],
-    photo_submitted: ['写真を送信しています。', '送信操作とGeminiの受信を確認しています。写真を自動で再送することはありません。'],
-    generating: ['Geminiで画像を生成しています。', '今回のチャットを閉じずにお待ちください。生成が終わると、そのチャットに画像が表示されます。'],
+    opening: ['Geminiを開いています。', '新しいチャットへ魔法の指示と写真をまとめて送ります。'],
+    photo_preparing: ['魔法の指示と写真を準備しています。', '写真の添付とプロンプト全文を確認しています。'],
+    photo_submitted: ['指示と写真を送信しています。', '送信操作とGeminiの受信を確認しています。自動で再送することはありません。'],
+    generating: ['Geminiで画像を生成しています。', '今回のチャットを閉じずにお待ちください。そのチャットに完成画像が表示されます。'],
     completed: ['冒険の一枚ができました。', 'Geminiで画像の生成を確認しました。「今回のGeminiを開く」から画像を確認できます。'],
     needs_attention: ['Geminiの画面を確認してください。', '処理結果を確定できませんでした。重複送信を避けるため、自動で再送することはありません。'],
     failed: ['準備を完了できませんでした。', 'Geminiのログインや画面の状態を確認してください。'],
   };
-  const [title, detail] = texts[state] || ['処理状況を確認しています。', 'Geminiの画面を閉じずにお待ちください。'];
+  const [title, detail] = texts[state];
   notice(title, job.message || detail, state);
   if (typeof job.url === 'string' && /^https:\/\/gemini\.google\.com\/app(?:\/[^?#]*)?(?:[?#].*)?$/.test(job.url)) {
     $('chat-link').href = job.url; $('chat-link').hidden = false;
@@ -208,37 +201,21 @@ async function connect() {
   $('check').disabled = true;
   try {
     const response = await rpc('HELLO');
-    connected = response?.ok === true && response.version === '1.1.0';
-    $('connection').textContent = connected ? 'Chrome拡張機能に接続しました。' : response?.ok ? '撮影対応の拡張機能へ更新してください。下の「初回の準備・拡張機能の更新」を開いてください。' : response?.error || '拡張機能に接続できませんでした。';
+    connected = response?.ok === true && response.version === '1.2.0';
+    $('connection').textContent = connected ? 'Chrome拡張機能に接続しました。' : response?.ok ? '撮影してから送信する新しい拡張機能へ更新してください。下の「初回の準備・拡張機能の更新」を開いてください。' : response?.error || '拡張機能に接続できませんでした。';
     if (connected) {
       $('setup').open = false;
-      if (!currentId) notice('魔法を選んで、冒険をはじめましょう。', '準備ができると、この画面でカメラ撮影から画像生成まで進められます。');
+      if (!currentId) notice('魔法を選んで、写真を撮りましょう。', '写真を確認して「この写真で生成」を押すと、Geminiへまとめて送信します。');
       if (currentId) await poll();
     } else {$('setup').open = true; camera.stop(); restoring = false;}
     updateButton();
   } finally {$('check').disabled = false;}
 }
 
-$('start').addEventListener('click', async () => {
-  if (!connected || busy || currentJob || restoring) return;
-  busy = true;
-  camera.clearPhoto();
-  currentId = crypto.randomUUID();
-  sessionStorage.setItem('quest-local-request', currentId);
-  sessionStorage.removeItem('quest-local-photo-request'); pendingPhoto = null;
-  currentJob = {requestId: currentId, spellId: selectedId, status: 'opening'};
-  updateButton(); $('chat-link').hidden = true;
-  notice('冒険の準備をはじめます。', 'Geminiの新しいタブを開きます。');
-  const id = currentId;
-  const response = await rpc('START', {spellId: selectedId, requestId: id});
-  if (id !== currentId) return;
-  if (!response?.ok) {
-    if (response?.transportFailure) await poll();
-    else uncertain(response?.error || '開始できませんでした。');
-    return;
-  }
-  showJob(response.job);
-  if (busy) pollTimer = setTimeout(poll, 1000);
+$('start').addEventListener('click', () => {
+  if (!readyForPhoto()) return;
+  $('photo-section').scrollIntoView({behavior: 'smooth', block: 'start'});
+  if (!camera.photo && camera.state !== 'live' && !['requesting', 'capturing'].includes(camera.state)) void camera.start($('camera-device').value);
 });
 
 $('camera-start').addEventListener('click', () => {if (readyForPhoto()) void camera.start($('camera-device').value);});
@@ -253,17 +230,15 @@ $('photo-file').addEventListener('change', () => {
 
 $('send-photo').addEventListener('click', async () => {
   if (!readyForPhoto() || !camera.photo || !camera.previewUrl || !previewReady || camera.state !== 'photo') return;
-  const id = currentId;
   const photo = camera.photo;
-  pendingPhoto = {requestId: id, photoRequestId: crypto.randomUUID()};
-  // Keep only the attempt ID, never the photo, so a reload cannot cause a resend.
-  sessionStorage.setItem('quest-local-photo-request', JSON.stringify(pendingPhoto));
-  busy = true; currentJob = {...currentJob, status: 'photo_preparing'};
-  photoDispatchInFlight = true;
-  camera.stop(); updateButton();
-  notice('この写真で画像を生成します。', '同じGeminiチャットへの添付・送信を確認しています。', 'photo_preparing');
-  const response = await rpc('PHOTO_START', {requestId: id, photoRequestId: pendingPhoto.photoRequestId, photo});
-  photoDispatchInFlight = false;
+  const id = crypto.randomUUID();
+  currentId = id;
+  sessionStorage.setItem('quest-local-request', id);
+  sessionStorage.removeItem('quest-local-photo-request');
+  busy = true; currentJob = {requestId: id, spellId: selectedId, status: 'opening'};
+  camera.stop(); updateButton(); $('chat-link').hidden = true;
+  notice('魔法の指示と写真をまとめて送ります。', 'Geminiの新しいチャットを開き、画像生成まで自動で進めます。', 'opening');
+  const response = await rpc('QUEST_START', {requestId: id, spellId: selectedId, photo});
   if (id !== currentId) return;
   if (!response?.ok) {
     if (response?.transportFailure) await poll();
@@ -284,10 +259,10 @@ $('check').addEventListener('click', connect);
 $('reset').addEventListener('click', () => {
   if (busy || restoring || !currentJob || !terminal.has(currentJob.status)) return;
   clearTimeout(pollTimer);
-  currentId = null; currentJob = null; pendingPhoto = null;
+  currentId = null; currentJob = null;
   sessionStorage.removeItem('quest-local-request'); sessionStorage.removeItem('quest-local-photo-request');
   camera.clearPhoto(); $('chat-link').hidden = true;
-  updateButton(); notice('新しい冒険を準備できます。', '魔法を選び、開始ボタンを押すと別のGeminiチャットを開きます。');
+  updateButton(); notice('新しい冒険を準備できます。', '魔法を選んで写真を用意してください。送信するまでGeminiは開きません。');
 });
 
 let extensionPath = '.local/crystal-quest-extension';
