@@ -6,12 +6,13 @@
     if (event.source !== window || event.origin !== origin) return;
     const message = event.data;
     if (!message || message.channel !== channel || message.direction !== 'request') return;
-    if (!['HELLO', 'START', 'STATUS'].includes(message.type)) return;
+    if (!['HELLO', 'START', 'STATUS', 'PHOTO_START', 'OPEN_CHAT'].includes(message.type)) return;
     if (typeof message.rpcId !== 'string' || !/^[\w-]{1,80}$/.test(message.rpcId)) return;
     let response;
     try {
       response = await chrome.runtime.sendMessage({
         channel, type: message.type, requestId: message.requestId, spellId: message.spellId,
+        ...(message.type === 'PHOTO_START' ? {photoRequestId: message.photoRequestId, photo: message.photo} : {}),
       });
     } catch {
       response = {ok: false, error: '拡張機能との接続が切れました。このページを再読み込みしてください。'};

@@ -25,6 +25,10 @@ export async function runGeminiDriver(options) {
     'textarea[aria-label="Enter a prompt here"]'
   ]);
   const readEditor = (editor) => typeof editor.value === 'string' ? editor.value : editor.innerText;
+  const hasAttachments = (editor) => {
+    const area = editor.closest?.('input-area-v2, input-container, input-area, .input-area-container, .input-container, form');
+    return area ? [...area.querySelectorAll('img, uploader-file-preview, file-preview, button[aria-label="添付ファイルを閉じる"], button[aria-label="Close attachment"]')].some(visible) : false;
+  };
   const userBubbles = () => uniqueVisible(['user-query', '[data-test-id="user-query"]']);
   const responseTexts = () => {
     const blocks = uniqueVisible([
@@ -80,6 +84,7 @@ export async function runGeminiDriver(options) {
       }
       if (!editor) return attention('Geminiの入力欄を確認できませんでした。Chromeでログイン状態を確認してください。');
       if (userBubbles().length || responseTexts().length) return attention('新規チャットを確認できませんでした。既存の会話には送信していません。');
+      if (hasAttachments(editor)) return attention('Geminiに別の添付があります。写真を含めずに開始するため、添付を確認してください。自動送信は行っていません。');
       const existing = normalize(readEditor(editor));
       if (existing && existing !== normalize(prompt)) return attention('入力欄に別の文章があります。上書きせずに停止しました。');
 
@@ -116,7 +121,7 @@ export async function runGeminiDriver(options) {
 
     if (phase !== 'send') return { status: 'failed', message: '未対応の操作です。' };
     const foundEditors = editors();
-    if (foundEditors.length !== 1 || normalize(readEditor(foundEditors[0])) !== normalize(prompt)) {
+    if (foundEditors.length !== 1 || hasAttachments(foundEditors[0]) || normalize(readEditor(foundEditors[0])) !== normalize(prompt)) {
       return attention('送信前の全文確認に失敗しました。自動送信を中止しました。');
     }
     if (userBubbles().length || responseTexts().length) return attention('新規チャットではないため、自動送信を中止しました。');

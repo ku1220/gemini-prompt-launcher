@@ -24,10 +24,12 @@ test('rejects non-loopback Host, foreign Origin and writes', async () => {
 });
 test('local metadata and responses prevent embedding and content sniffing', async () => {
   const result = await request('/local-info.json');
-  assert.deepEqual(JSON.parse(result.body), {extensionPath: '/example/extension', version: '1.0.0'});
+  assert.deepEqual(JSON.parse(result.body), {extensionPath: '/example/extension', version: '1.1.0'});
   assert.equal(result.headers['X-Frame-Options'], 'DENY');
   assert.equal(result.headers['X-Content-Type-Options'], 'nosniff');
   assert.equal(result.headers['Access-Control-Allow-Origin'], undefined);
+  assert.match(result.headers['Content-Security-Policy'], /img-src 'self' blob: data:/);
+  assert.equal(result.headers['Permissions-Policy'], 'camera=(self), microphone=(), geolocation=()');
   assert.equal((await request('/', {method: 'HEAD'})).body, '');
 });
 test('extension permissions stay limited to Gemini and loopback bridge', async () => {

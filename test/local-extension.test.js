@@ -2,7 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { SPELLS, buildQuestPrompt, WELCOME_TEXT } from '../dist/quest.js';
+import { SPELLS, buildQuestPrompt as buildPublicQuestPrompt, WELCOME_TEXT as MOBILE_WELCOME } from '../dist/quest.js';
+import {validatePhoto, conversationUrl} from '../local/extension/photo-contract.js';
+
+const promptContext = vm.createContext({buildQuestPrompt: buildPublicQuestPrompt, WELCOME_TEXT: MOBILE_WELCOME});
+new vm.Script((await readFile(new URL('../local/extension/local-prompt.js', import.meta.url), 'utf8')).replace(/^import .*;\n/gm, '').replace(/^export /gm, '')).runInContext(promptContext);
+const buildQuestPrompt = promptContext.buildLocalQuestPrompt;
+const WELCOME_TEXT = vm.runInContext('LOCAL_WELCOME_TEXT', promptContext);
 
 const workerSource = (await readFile(new URL('../local/extension/worker.js', import.meta.url), 'utf8'))
   .replace(/^import .*;\n/gm, '')
@@ -22,9 +28,9 @@ function deferred() {
   return { promise, resolve };
 }
 
-function workerHarness({ store = {}, execute, tabUrl = 'https://gemini.google.com/app' } = {}) {
+function workerHarness({ store = {}, execute, tabUrl = 'https://gemini.google.com/app/test-chat-0001' } = {}) {
   let listener;
-  const calls = { tabs: [], scripts: [] };
+  const calls = { tabs: [], scripts: [], focuses: [] };
   const chrome = {
     runtime: { id: localSender.id, onMessage: { addListener(fn) { listener = fn; } } },
     storage: { session: {
@@ -33,18 +39,21 @@ function workerHarness({ store = {}, execute, tabUrl = 'https://gemini.google.co
     } },
     tabs: {
       async create(options) { calls.tabs.push(options); return { id: calls.tabs.length }; },
-      async get(id) { return { id, status: 'complete', url: tabUrl }; }
+      async get(id) { return { id, status: 'complete', url: typeof tabUrl === 'function' ? tabUrl(id) : tabUrl }; },
+      async update(id, options) {calls.focuses.push({id, options}); return {id};}
     },
     scripting: { async executeScript(options) {
       const arg = options.args[0];
       calls.scripts.push({ phase: arg.phase, args: arg, storeAtCall: structuredClone(store), target: options.target });
       const result = execute
         ? await execute(arg, options)
-        : arg.phase === 'prepare' ? { status: 'ready' } : { status: 'completed', submissionConfirmed: true, welcomeMatched: true };
+        : arg.photoRequestId
+          ? arg.phase === 'prepare' ? {status: 'photo_ready'} : {status: 'completed', photoSubmissionConfirmed: true, imageCount: 1}
+          : arg.phase === 'prepare' ? { status: 'ready' } : { status: 'completed', submissionConfirmed: true, welcomeMatched: true };
       return [{ frameId: 0, result }];
     } }
   };
-  const context = vm.createContext({ chrome, SPELLS, buildQuestPrompt, WELCOME_TEXT, runGeminiDriver() {}, URL, setTimeout, clearTimeout, console });
+  const context = vm.createContext({ chrome, SPELLS, buildQuestPrompt, WELCOME_TEXT, validatePhoto, conversationUrl, runGeminiDriver() {}, runPhotoDriver() {}, URL, setTimeout, clearTimeout, console });
   new vm.Script(workerSource, { filename: 'local/extension/worker.js' }).runInContext(context);
   function dispatch(payload, sender = localSender) {
     return new Promise((resolve, reject) => {
@@ -94,8 +103,8 @@ test('duplicate start is idempotent and submit boundary is saved before send', a
   const worker = workerHarness();
   assert.equal((await worker.start({ prompt: 'untrusted replacement', url: 'https://example.com/' })).ok, true);
   assert.equal((await worker.start()).ok, true);
-  await waitFor(async () => (await worker.status()).job.status === 'completed');
-  assert.equal((await worker.start()).job.status, 'completed');
+  await waitFor(async () => (await worker.status()).job.status === 'awaiting_photo');
+  assert.equal((await worker.start()).job.status, 'awaiting_photo');
   assert.equal(worker.calls.tabs.length, 1);
   assert.equal(worker.calls.tabs[0].url, 'https://gemini.google.com/app');
   assert.equal(worker.calls.tabs[0].active, true);
@@ -112,14 +121,14 @@ test('duplicate start is idempotent and submit boundary is saved before send', a
 
 test('different request cannot run while first job is preparing', async () => {
   const gate = deferred();
-  const worker = workerHarness({ execute: async ({ phase }) => phase === 'prepare' ? gate.promise : { status: 'completed' } });
+  const worker = workerHarness({ execute: async ({ phase }) => phase === 'prepare' ? gate.promise : { status: 'completed', submissionConfirmed: true, welcomeMatched: true } });
   await worker.start();
   await waitFor(() => worker.calls.scripts.length === 1);
   const blocked = await worker.start({ requestId: 'test-request-00000002', spellId: 'flare' });
   assert.equal(blocked.ok, false);
   assert.equal(worker.calls.tabs.length, 1);
   gate.resolve({ status: 'ready' });
-  await waitFor(async () => (await worker.status()).job.status === 'completed');
+  await waitFor(async () => (await worker.status()).job.status === 'awaiting_photo');
 });
 
 test('worker restart reports uncertain prior submission and does not reopen or resubmit', async () => {
@@ -158,10 +167,10 @@ test('login redirect is reported without injecting a driver into another origin'
   assert.equal(worker.calls.scripts.length, 0);
 });
 
-function driverHarness({ responseText = '指定と異なる返答', extraResponseText, hasImage = false, editorText = buildQuestPrompt('ultima'), url = 'https://gemini.google.com/app' } = {}) {
+function driverHarness({ responseText = '指定と異なる返答', extraResponseText, hasImage = false, hasAttachment = false, editorText = buildQuestPrompt('ultima'), url = 'https://gemini.google.com/app' } = {}) {
   let clicked = 0;
   const node = (innerText = '') => ({ innerText, isConnected: true, getClientRects: () => [{}], getAttribute: () => null, contains: () => false });
-  const editor = { ...node(editorText), value: editorText, focus() {} };
+  const editor = { ...node(editorText), value: editorText, focus() {}, closest: () => ({querySelectorAll: () => hasAttachment ? [node()] : []}) };
   const bubble = node(buildQuestPrompt('ultima'));
   const response = node(responseText);
   const extraResponse = extraResponseText ? node(extraResponseText) : null;
@@ -238,5 +247,100 @@ test('prepare reuses only a restored draft that matches the entire selected ques
     const otherDraft = driverHarness({editorText: text});
     assert.equal((await otherDraft.run({phase: 'prepare'})).status, 'needs_attention');
     assert.equal(otherDraft.clicks(), 0);
+  }
+});
+
+test('initial quest never sends an existing photo attachment with the welcome request', async () => {
+  for (const phase of ['prepare', 'send']) {
+    const driver = driverHarness({hasAttachment: true});
+    assert.equal((await driver.run({phase})).status, 'needs_attention');
+    assert.equal(driver.clicks(), 0);
+  }
+});
+
+const photoRequestId = 'test-photo-0000000001';
+const photoBytes = Buffer.from([255, 216, 255, 224, 0, 2, 255, 217]);
+const testPhoto = {mime: 'image/jpeg', size: photoBytes.length, name: 'private-original-name.jpg', dataUrl: `data:image/jpeg;base64,${photoBytes.toString('base64')}`};
+const photoStart = (worker, overrides = {}) => worker.dispatch({type: 'PHOTO_START', requestId, photoRequestId, photo: testPhoto, ...overrides});
+async function readyWorker(options) {
+  const worker = workerHarness(options);
+  await worker.start();
+  await waitFor(async () => (await worker.status()).job.status === 'awaiting_photo');
+  return worker;
+}
+
+test('photo is attached and submitted once to the prepared tab without storing image bytes', async () => {
+  const worker = await readyWorker();
+  assert.equal((await photoStart(worker)).ok, true);
+  await waitFor(async () => (await worker.status()).job.status === 'completed');
+  const job = (await worker.status()).job;
+  assert.equal(job.photoSubmissionConfirmed, true);
+  assert.equal(job.imageCount, 1);
+  assert.equal(worker.calls.tabs.length, 1);
+  assert.deepEqual(worker.calls.scripts.map((call) => call.target.tabId), [1, 1, 1, 1]);
+  assert.deepEqual(worker.calls.scripts.map((call) => call.phase), ['prepare', 'send', 'prepare', 'send']);
+  assert.equal(worker.calls.scripts[2].args.expectedUrl, 'https://gemini.google.com/app/test-chat-0001');
+  assert.equal(worker.calls.scripts[3].storeAtCall.crystalQuestJobs[requestId].photoSubmitAttempted, true);
+  assert.equal(worker.calls.scripts[3].args.photo, undefined);
+  const stored = JSON.stringify(worker.store);
+  assert.ok(!stored.includes(testPhoto.dataUrl));
+  assert.ok(!stored.includes(testPhoto.name));
+  assert.equal((await photoStart(worker)).job.status, 'completed');
+  assert.equal(worker.calls.scripts.length, 4);
+  assert.equal((await photoStart(worker, {photoRequestId: 'different-photo-0001'})).ok, false);
+});
+
+test('duplicate photo request is idempotent while upload is pending', async () => {
+  const gate = deferred();
+  const worker = await readyWorker({execute: async (args) => {
+    if (args.photoRequestId) return args.phase === 'prepare' ? gate.promise : {status: 'completed', photoSubmissionConfirmed: true, imageCount: 1};
+    return args.phase === 'prepare' ? {status: 'ready'} : {status: 'completed', submissionConfirmed: true, welcomeMatched: true};
+  }});
+  await photoStart(worker);
+  await waitFor(() => worker.calls.scripts.length === 3);
+  assert.equal((await photoStart(worker)).ok, true);
+  assert.equal(worker.calls.scripts.length, 3);
+  gate.resolve({status: 'photo_ready'});
+  await waitFor(async () => (await worker.status()).job.status === 'completed');
+  assert.equal(worker.calls.scripts.length, 4);
+});
+
+test('a different conversation or a quest without a welcome cannot receive a photo', async () => {
+  const notReady = workerHarness();
+  assert.equal((await photoStart(notReady)).ok, false);
+  let currentUrl = 'https://gemini.google.com/app/test-chat-0001';
+  const worker = await readyWorker({tabUrl: () => currentUrl});
+  currentUrl = 'https://gemini.google.com/app/another-conversation';
+  assert.equal((await photoStart(worker)).ok, false);
+  assert.equal(worker.calls.scripts.length, 2);
+});
+
+test('photo failures and worker restarts never cause automatic reattachment or resubmission', async () => {
+  for (const failPhase of ['prepare', 'send']) {
+    const worker = await readyWorker({execute: async (args) => {
+      if (!args.photoRequestId) return args.phase === 'prepare' ? {status: 'ready'} : {status: 'completed', submissionConfirmed: true, welcomeMatched: true};
+      if (args.phase === failPhase) throw new Error('Interrupted');
+      return {status: 'photo_ready'};
+    }});
+    await photoStart(worker);
+    await waitFor(async () => (await worker.status()).job.status === 'needs_attention');
+    const before = worker.calls.scripts.length;
+    assert.equal((await photoStart(worker)).job.status, 'needs_attention');
+    assert.equal(worker.calls.scripts.length, before);
+    const restarted = workerHarness({store: structuredClone(worker.store)});
+    assert.equal((await photoStart(restarted)).job.status, 'needs_attention');
+    assert.equal(restarted.calls.tabs.length, 0);
+    assert.equal(restarted.calls.scripts.length, 0);
+  }
+});
+
+test('zero or multiple output images never become completed even if a driver says completed', async () => {
+  for (const imageCount of [0, 2]) {
+    const worker = await readyWorker({execute: async (args) => args.photoRequestId
+      ? args.phase === 'prepare' ? {status: 'photo_ready'} : {status: 'completed', photoSubmissionConfirmed: true, imageCount}
+      : args.phase === 'prepare' ? {status: 'ready'} : {status: 'completed', submissionConfirmed: true, welcomeMatched: true}});
+    await photoStart(worker);
+    await waitFor(async () => (await worker.status()).job.status === 'needs_attention');
+    assert.equal((await worker.status()).job.imageCount, imageCount);
   }
 });

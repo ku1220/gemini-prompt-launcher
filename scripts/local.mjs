@@ -12,11 +12,14 @@ const headers = {
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'",
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'",
+  'Permissions-Policy': 'camera=(self), microphone=(), geolocation=()',
 };
 const routes = new Map([
   ['/', [new URL('index.html', webRoot), 'text/html; charset=utf-8']],
   ['/local.js', [new URL('local.js', webRoot), 'text/javascript; charset=utf-8']],
+  ['/camera.js', [new URL('camera.js', webRoot), 'text/javascript; charset=utf-8']],
+  ['/assets/local-prompt.js', [new URL('../local/extension/local-prompt.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/local.css', [new URL('local.css', webRoot), 'text/css; charset=utf-8']],
   ...['styles.css', 'quest.js', 'icon.svg', 'crystal.svg'].map((file) => [`/assets/${file}`, [new URL(file, assets), file.endsWith('.svg') ? 'image/svg+xml' : file.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8']]),
 ]);
@@ -30,7 +33,7 @@ export function createLocalHandler(extensionPath) {
     let url;
     try {url = new URL(req.url, LOCAL_ORIGIN);} catch {return reply(400, 'text/plain', 'Bad URL');}
     if (url.origin !== LOCAL_ORIGIN) return reply(403, 'text/plain', 'Invalid URL');
-    if (url.pathname === '/local-info.json') return reply(200, 'application/json; charset=utf-8', JSON.stringify({extensionPath, version: '1.0.0'}));
+    if (url.pathname === '/local-info.json') return reply(200, 'application/json; charset=utf-8', JSON.stringify({extensionPath, version: '1.1.0'}));
     const route = routes.get(url.pathname);
     if (!route) return reply(404, 'text/plain', 'Not found');
     try {return reply(200, route[1], await readFile(route[0]));} catch {return reply(500, 'text/plain', 'Local file unavailable');}
