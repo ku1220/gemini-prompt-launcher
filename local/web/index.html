@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark"><meta name="referrer" content="no-referrer">
+  <title>CRYSTAL QUEST — ローカル起動</title>
+  <link rel="icon" href="/assets/icon.svg"><link rel="stylesheet" href="/assets/styles.css"><link rel="stylesheet" href="/local.css">
+  <script type="module" src="/local.js"></script>
+</head>
+<body>
+  <header class="site-header"><a class="brand" href="/"><img src="/assets/icon.svg" width="34" height="42" alt=""><span>CRYSTAL QUEST<small>クリスタルクエスト</small></span></a><span class="local-badge">MAC / CHROME · LOCAL</span></header>
+  <main>
+    <section class="local-hero"><div><p class="eyebrow">YOUR MAGIC. ONE CLICK.</p><h1>その一枚が、<br><span>伝説になる。</span></h1><p class="hero-description">魔法を選んで、冒険をはじめよう。<br>Geminiへ指示を送り、写真の準備を整えます。</p></div><img src="/assets/crystal.svg" alt="" width="280" height="290"></section>
+    <section class="magic-section" aria-labelledby="magic-title"><div class="section-heading"><div><p class="eyebrow">CHOOSE YOUR MAGIC</p><h2 id="magic-title">どの魔法で、世界を変える？</h2></div></div>
+      <fieldset id="spells" class="spell-grid"><legend class="sr-only">使用する魔法</legend></fieldset>
+      <div class="departure-panel"><div class="selected-spell"><span class="selected-label">YOUR MAGIC</span><div class="selected-title"><span class="mini-diamond" aria-hidden="true"></span><h3 id="spell-name">アルテマ</h3></div><p id="spell-description"></p></div><div class="departure-action"><button id="start" class="primary-button" type="button" disabled>拡張機能を確認中…</button><p id="connection" role="status">Chromeの拡張機能を確認しています。</p></div></div>
+      <div class="run-state" aria-live="polite"><p id="run-title">初回は、下の手順で拡張機能を追加してください。</p><p id="run-detail">送信するのは選んだ魔法のクエスト指示です。写真はGeminiで直接送信します。</p><a id="chat-link" href="https://gemini.google.com/app" target="_blank" rel="noreferrer" hidden>今回のGeminiを開く ↗</a><button id="check" class="text-button" type="button">接続を再確認</button><button id="reset" class="text-button" type="button" hidden>Geminiを確認したので、新しい冒険を準備する</button></div>
+    </section>
+    <section class="how-section"><div class="section-heading"><div><p class="eyebrow">HOW TO PLAY</p><h2>はじめる、撮る、魔法を放つ。</h2></div></div><div class="how-grid"><article><h3>01　魔法を選んで開始</h3><p>新しいGeminiチャットを開き、選んだ魔法の指示を自動で入力・送信します。</p></article><article><h3>02　案内が出たら写真を送信</h3><p>Geminiの「＋」から、あなたとまものが写った写真を選んで送信してください。</p></article><article><h3>03　一枚の戦闘シーンへ</h3><p>選んだ魔法に合わせて、写真から画像を1枚生成するよう依頼します。</p></article></div></section>
+    <section class="behind-section"><details id="setup" class="prompt-details" open><summary>初回の準備（Chrome用）</summary><div class="prompt-content"><ol class="setup-list"><li>ChromeでGeminiにログインします。</li><li><code>chrome://extensions</code> を開き、「デベロッパーモード」をオンにします。<button id="copy-extensions" class="text-button" type="button">アドレスをコピー</button></li><li>「パッケージ化されていない拡張機能を読み込む」から、下のフォルダを選びます。<p><code id="extension-path">.local/crystal-quest-extension</code></p><button id="copy-path" class="text-button" type="button">フォルダのパスをコピー</button></li><li>このページを再読み込みします。ボタンが「冒険をはじめる」に変われば準備完了です。</li></ol><p>拡張機能のアクセス先はGeminiとローカル起動画面です。Safariやスマートフォンのネイティブアプリは、この試作の対象外です。</p></div></details>
+      <details class="prompt-details prompt-inspect"><summary>Geminiに送信する指示を確認</summary><div class="prompt-content"><label class="sr-only" for="prompt">送信する全文</label><textarea id="prompt" readonly></textarea></div></details>
+    </section>
+  </main><footer class="site-footer"><a class="footer-brand" href="/">CRYSTAL QUEST<span>LOCAL EDITION</span></a><div><p>APIキーは不要です。Google・スクウェア・エニックスの公式サービスではありません。</p><p>端末の電源やネット接続、Geminiのログイン・利用条件が必要です。</p></div></footer>
+</body></html>

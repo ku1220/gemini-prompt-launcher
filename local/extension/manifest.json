@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Crystal Quest Local",
+  "version": "1.0.0",
+  "description": "ローカルのクエストボタンから、Gemini Webに指示を入力・送信します。",
+  "minimum_chrome_version": "120",
+  "permissions": ["scripting", "storage"],
+  "host_permissions": ["https://gemini.google.com/*"],
+  "background": {"service_worker": "worker.js", "type": "module"},
+  "action": {"default_title": "Crystal Quest Local", "default_popup": "popup.html"},
+  "content_scripts": [{
+    "matches": ["http://127.0.0.1/*"],
+    "js": ["bridge.js"],
+    "run_at": "document_start",
+    "all_frames": false
+  }]
+}

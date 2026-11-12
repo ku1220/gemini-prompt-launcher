@@ -6,8 +6,10 @@
   "description": "CRYSTAL QUEST: FF-inspired magic photo prompts and Gemini app handoff.",
   "scripts": {
     "start": "node scripts/serve.mjs",
+    "local": "node scripts/local.mjs",
+    "local:prepare": "node scripts/prepare-local.mjs",
     "test": "node --test",
-    "check": "node --check dist/app.js && node --check dist/launcher.js && node --check dist/quest.js && node --test"
+    "check": "node --check dist/app.js && node --check dist/launcher.js && node --check dist/quest.js && node --check scripts/local.mjs && node --check local/web/local.js && node --check local/extension/bridge.js && node --check local/extension/worker.js && node --check local/extension/gemini-driver.js && node --test"
   },
   "engines": { "node": ">=20" }
 }
